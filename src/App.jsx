@@ -27,6 +27,19 @@ function App() {
         JSON.parse(localStorage.getItem('selected_otts')) || ALL_OTT_LIST.map(o => o.id)
     )
     const [loadingDots, setLoadingDots] = useState('')
+    const [recommendedKeywords, setRecommendedKeywords] = useState([])
+
+    useEffect(() => {
+        const keywords = [
+            '나홀로 집에', '오징어 게임', '진격의 거인', '귀멸의 칼날', '최악의 악',
+            '씽', '파묘', '범죄도시4', '주토피아', '인사이드 아웃 2',
+            '데드풀과 울버린', '서울의 봄', '엘리멘탈', '스파이더맨: 뉴 유니버스',
+            '기생충', '곡성', '부산행', '극한직업', '미션 임파서블', '해리 포터'
+        ];
+        // Shuffle and take 8 random keywords
+        const shuffled = [...keywords].sort(() => 0.5 - Math.random());
+        setRecommendedKeywords(shuffled.slice(0, 8));
+    }, []);
 
     useEffect(() => {
         let interval;
@@ -166,7 +179,7 @@ function App() {
                             style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', fontSize: '14px', color: '#6b7280' }}
                         >
                             <span>추천:</span>
-                            {['나홀로 집에', '오징어 게임', '진격의 거인', '귀멸의 칼날', '최악의 악', '씽', '파묘', '범죄도시4'].map(kw => (
+                            {recommendedKeywords.map(kw => (
                                 <button
                                     key={kw}
                                     onClick={() => handleRecommend(kw)}

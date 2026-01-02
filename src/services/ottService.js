@@ -118,9 +118,40 @@ export const searchOTT = async (query) => {
     };
 
     try {
-        // 1. TMDB Multi-Search
-        const searchRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(queryClean)}&language=ko-KR&page=1`);
-        const searchData = await searchRes.json();
+        let searchRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(queryClean)}&language=ko-KR&page=1`);
+        let searchData = await searchRes.json();
+
+        // 1.1 Smart Spacing Fallback for Korean (e.g., "데드풀과울버린" -> "데드풀과 울버린")
+        // Always try inserting a space for no-space queries to maximize results
+        if (!queryClean.includes(' ') && queryClean.length > 3) {
+            const fallbackResults = [];
+            // Try inserting a space at different positions (from index 2 to length-2)
+            // Limit to first few positions for performance
+            const positions = [2, 3, 4].filter(p => p <= queryClean.length - 2);
+            for (const i of positions) {
+                const fq = queryClean.slice(0, i) + ' ' + queryClean.slice(i);
+                try {
+                    const fRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(fq)}&language=ko-KR&page=1`);
+                    const fData = await fRes.json();
+                    if (fData.results && fData.results.length > 0) {
+                        fallbackResults.push(...fData.results);
+                    }
+                } catch (err) {
+                    console.warn(`Fallback search failed for ${fq}:`, err);
+                }
+            }
+            if (fallbackResults.length > 0) {
+                if (!searchData.results) searchData.results = [];
+                const existingIds = new Set(searchData.results.map(r => r.id));
+                fallbackResults.forEach(r => {
+                    if (!existingIds.has(r.id)) {
+                        searchData.results.push(r);
+                        existingIds.add(r.id);
+                    }
+                });
+            }
+        }
+
         if (!searchData.results) return [];
 
         let itemsToProcess = [...searchData.results.slice(0, 16)];
