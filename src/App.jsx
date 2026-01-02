@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Search, Loader2, X, Settings, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { searchOTT, getOTTIcon } from './services/ottService'
@@ -29,6 +29,7 @@ function App() {
     const [loadingDots, setLoadingDots] = useState('')
     const [recommendedKeywords, setRecommendedKeywords] = useState([])
     const [displaySearchTerm, setDisplaySearchTerm] = useState('')
+    const inputRef = useRef(null)
 
     useEffect(() => {
         const keywords = [
@@ -135,6 +136,13 @@ function App() {
         }
     }
 
+    const handleClear = () => {
+        setSearchTerm('')
+        if (inputRef.current) {
+            inputRef.current.focus()
+        }
+    }
+
     return (
         <div className="main-wrapper">
             <div className="bg-glow-top" />
@@ -153,6 +161,7 @@ function App() {
                     <div className="search-container">
                         <form onSubmit={handleSearch} className="search-input-wrapper">
                             <input
+                                ref={inputRef}
                                 type="text"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -161,7 +170,7 @@ function App() {
                             />
                             <div className="search-buttons">
                                 {searchTerm && (
-                                    <button type="button" onClick={() => setSearchTerm('')} className="clear-btn">
+                                    <button type="button" onClick={handleClear} className="clear-btn">
                                         <X size={18} />
                                     </button>
                                 )}
