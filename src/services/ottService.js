@@ -123,12 +123,10 @@ export const searchOTT = async (query) => {
 
         // 1.1 Smart Spacing Fallback for Korean (e.g., "데드풀과울버린" -> "데드풀과 울버린")
         // Always try inserting a space for no-space queries to maximize results
-        if (!queryClean.includes(' ') && queryClean.length > 3) {
+        if (!queryClean.includes(' ') && queryClean.length >= 2) {
             const fallbackResults = [];
-            // Try inserting a space at different positions (from index 2 to length-2)
-            // Limit to first few positions for performance
-            const positions = [2, 3, 4].filter(p => p <= queryClean.length - 2);
-            for (const i of positions) {
+            // Try inserting a space at EVERY possible position
+            for (let i = 1; i < queryClean.length; i++) {
                 const fq = queryClean.slice(0, i) + ' ' + queryClean.slice(i);
                 try {
                     const fRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(fq)}&language=ko-KR&page=1`);
