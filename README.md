@@ -1,7 +1,5 @@
-[https://leeseungki-hub.github.io/ott-hub/](https://leeseungki-hub.github.io/ott-hub/)
-
 # 🎬 OTT Hub (OTT 통합 검색 서비스)
-
+- **바로가기**: https://leesk1283-github.github.io/ott-hub/
 한국의 다양한 OTT 플랫폼(Netflix, Disney+, wavve, Watcha, TVING 등)의 영화 및 TV 시리즈 정보를 한눈에 검색하고 최저가 정보를 확인할 수 있는 웹 애플리케이션입니다.
 
 ## ✨ 주요 기능
