@@ -28,6 +28,7 @@ function App() {
     )
     const [loadingDots, setLoadingDots] = useState('')
     const [recommendedKeywords, setRecommendedKeywords] = useState([])
+    const [displaySearchTerm, setDisplaySearchTerm] = useState('')
 
     useEffect(() => {
         const keywords = [
@@ -86,6 +87,7 @@ function App() {
 
         setIsSearching(true)
         setHasSearched(true)
+        setDisplaySearchTerm(searchTerm)
         addToRecent(searchTerm)
 
         try {
@@ -105,6 +107,7 @@ function App() {
         setSearchTerm(kw)
         setIsSearching(true)
         setHasSearched(true)
+        setDisplaySearchTerm(kw)
         addToRecent(kw)
         setTimeout(async () => {
             const data = await searchOTT(kw)
@@ -286,7 +289,7 @@ function App() {
                                             </>
                                         ) : (
                                             <>
-                                                "<span style={{ color: '#60a5fa' }}>{searchTerm}</span>" 결과 <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{filteredResults.length}</span>건
+                                                "<span style={{ color: '#60a5fa' }}>{displaySearchTerm}</span>" 결과 <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{filteredResults.length}</span>건
                                             </>
                                         )}
                                     </h2>
