@@ -94,10 +94,11 @@ export const searchOTT = async (query) => {
         if (lowName.includes('watcha')) return 'Watcha';
         if (lowName.includes('tving')) return 'TVING';
         if (lowName.includes('apple')) return 'Apple TV';
+        if (lowName.includes('coupang')) return 'Coupang Play';
         return name;
     };
 
-    // Generate direct search links for each provider (fallback for TMDB's generic link)
+    // Generate direct search links for each provider
     const getProviderSearchLink = (providerName, title) => {
         const encodedTitle = encodeURIComponent(title);
         const providerLinks = {
@@ -110,9 +111,7 @@ export const searchOTT = async (query) => {
             'Google Play Movies': `https://play.google.com/store/search?q=${encodedTitle}&c=movies`,
             'TVING': `https://www.tving.com/search?keyword=${encodedTitle}`,
             'Amazon Prime Video': `https://www.primevideo.com/search?phrase=${encodedTitle}`,
-            'seezn': `https://www.seezn.com/search?keyword=${encodedTitle}`,
             'Naver Store': `https://m.series.naver.com/search/search.series?keyword=${encodedTitle}`,
-            'Crunchyroll': `https://www.crunchyroll.com/search?q=${encodedTitle}`,
         };
         return providerLinks[providerName] || null;
     };
@@ -121,22 +120,16 @@ export const searchOTT = async (query) => {
         let searchRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(queryClean)}&language=ko-KR&page=1`);
         let searchData = await searchRes.json();
 
-        // 1.1 Smart Spacing Fallback for Korean (e.g., "데드풀과울버린" -> "데드풀과 울버린")
-        // Always try inserting a space for no-space queries to maximize results
+        // 1.1 Smart Spacing Fallback
         if (!queryClean.includes(' ') && queryClean.length >= 2) {
             const fallbackResults = [];
-            // Try inserting a space at EVERY possible position
             for (let i = 1; i < queryClean.length; i++) {
                 const fq = queryClean.slice(0, i) + ' ' + queryClean.slice(i);
                 try {
                     const fRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(fq)}&language=ko-KR&page=1`);
                     const fData = await fRes.json();
-                    if (fData.results && fData.results.length > 0) {
-                        fallbackResults.push(...fData.results);
-                    }
-                } catch (err) {
-                    console.warn(`Fallback search failed for ${fq}:`, err);
-                }
+                    if (fData.results) fallbackResults.push(...fData.results);
+                } catch (err) { }
             }
             if (fallbackResults.length > 0) {
                 if (!searchData.results) searchData.results = [];
@@ -158,25 +151,27 @@ export const searchOTT = async (query) => {
         // 2. Collection Expansion
         for (const item of searchData.results.slice(0, 4)) {
             if (item.media_type === 'movie') {
-                const detailRes = await fetch(`${TMDB_BASE_URL}/movie/${item.id}?api_key=${TMDB_API_KEY}&language=ko-KR`);
-                const details = await detailRes.json();
-                if (details.belongs_to_collection && !processedCollectionIds.has(details.belongs_to_collection.id)) {
-                    const cId = details.belongs_to_collection.id;
-                    processedCollectionIds.add(cId);
-                    const cRes = await fetch(`${TMDB_BASE_URL}/collection/${cId}?api_key=${TMDB_API_KEY}&language=ko-KR`);
-                    const cData = await cRes.json();
-                    if (cData.parts) {
-                        cData.parts.forEach(part => {
-                            if (!itemsToProcess.some(it => it.id === part.id)) {
-                                itemsToProcess.push({ ...part, media_type: 'movie' });
-                            }
-                        });
+                try {
+                    const detailRes = await fetch(`${TMDB_BASE_URL}/movie/${item.id}?api_key=${TMDB_API_KEY}&language=ko-KR`);
+                    const details = await detailRes.json();
+                    if (details.belongs_to_collection && !processedCollectionIds.has(details.belongs_to_collection.id)) {
+                        const cId = details.belongs_to_collection.id;
+                        processedCollectionIds.add(cId);
+                        const cRes = await fetch(`${TMDB_BASE_URL}/collection/${cId}?api_key=${TMDB_API_KEY}&language=ko-KR`);
+                        const cData = await cRes.json();
+                        if (cData.parts) {
+                            cData.parts.forEach(part => {
+                                if (!itemsToProcess.some(it => it.id === part.id)) {
+                                    itemsToProcess.push({ ...part, media_type: 'movie' });
+                                }
+                            });
+                        }
                     }
-                }
+                } catch (e) { }
             }
         }
 
-        // 3. Initial Pricing API Title Search (Broad Match)
+        // 3. Initial Pricing API Title Search
         let pricingMap = new Map();
         try {
             const pricingUrl = `https://${RAPID_API_HOST}/shows/search/title?title=${encodeURIComponent(queryClean)}&country=kr`;
@@ -186,26 +181,20 @@ export const searchOTT = async (query) => {
             });
             if (pricingRes.status === 200) {
                 const pricingData = await pricingRes.json();
-                const shows = Array.isArray(pricingData) ? pricingData : pricingData.result;
-                if (shows) {
-                    shows.forEach(show => {
-                        const krOptions = show.streamingOptions?.kr;
-                        if (krOptions) {
-                            const tKey = (show.title || '').toLowerCase().replace(/\s/g, '');
-                            const oKey = (show.originalTitle || '').toLowerCase().replace(/\s/g, '');
-                            if (tKey) pricingMap.set(tKey, krOptions);
-                            if (oKey) pricingMap.set(oKey, krOptions);
-                        }
-                    });
-                }
+                const shows = Array.isArray(pricingData) ? pricingData : (pricingData.result || []);
+                shows.forEach(show => {
+                    const krOptions = show.streamingOptions?.kr;
+                    if (krOptions) {
+                        const tKey = (show.title || '').toLowerCase().replace(/\s/g, '');
+                        const oKey = (show.originalTitle || '').toLowerCase().replace(/\s/g, '');
+                        if (tKey) pricingMap.set(tKey, krOptions);
+                        if (oKey) pricingMap.set(oKey, krOptions);
+                    }
+                });
             }
-        } catch (e) {
-            console.warn("Pricing Title Lookup Failed:", e);
-        }
+        } catch (e) { }
 
-        // 4. Aggregation with Targeted Lookups
-        const results = [];
-        // Process top results with deep inspection
+        const finalResults = [];
         const priorityItems = itemsToProcess.slice(0, 15);
 
         for (const item of priorityItems) {
@@ -215,17 +204,14 @@ export const searchOTT = async (query) => {
             const titleKey = fullTitle.toLowerCase().replace(/\s/g, '');
             const originalKey = originalTitle.toLowerCase().replace(/\s/g, '');
 
-            // Strict Filter for "최악의 악" case
             if (queryClean.length >= 3 && !titleKey.includes(queryNoSpace) && !originalKey.includes(queryNoSpace)) {
                 continue;
             }
 
             let providers = [];
 
-            // A. Check Pricing Map (from Title Search)
+            // A. Premium API
             let premiumOptions = pricingMap.get(titleKey) || pricingMap.get(originalKey);
-
-            // B. If no premium options, try targeted TMDB ID lookup (Maximize KR Coverage)
             if (!premiumOptions) {
                 const deepData = await fetchByTmdbId(item.id, type);
                 if (deepData && deepData.streamingOptions?.kr) {
@@ -240,11 +226,6 @@ export const searchOTT = async (query) => {
                         ? `${opt.price.amount.toLocaleString()}${opt.price.currency === 'KRW' ? '원' : opt.price.currency}(${opt.type === 'buy' ? '구매' : '대여'})`
                         : (opt.type === 'subscription' ? '구독(무료)' : (opt.type === 'free' ? '무료' : '확인 필요'));
 
-                    // Special Disclosure: Netflix Home Alone Restrictions
-                    if (providerName === 'Netflix' && fullTitle.includes('나 홀로 집에')) {
-                        priceText += '\n광고형 멤버십 이용 불가';
-                    }
-
                     providers.push({
                         provider_name: providerName,
                         text: priceText,
@@ -255,81 +236,64 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // C. ALSO check TMDB Watch Providers (Merge with Premium API for maximum coverage)
-            // TMDB often has Korean OTT data that Premium API is missing (e.g., Watcha, TVING, Crunchyroll)
+            // B. TMDB Watch Providers
             try {
                 const wpRes = await fetch(`${TMDB_BASE_URL}/${type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`);
                 const wpData = await wpRes.json();
                 const kr = wpData.results?.KR;
                 if (kr) {
-                    // Add TMDB providers that don't already exist from Premium API
-                    const existingProviders = new Set(providers.map(p => p.provider_name));
-
-                    if (kr.flatrate) kr.flatrate.forEach(p => {
-                        const pName = normalizeProvider(p.provider_name);
-                        if (!existingProviders.has(pName)) {
-                            const directLink = getProviderSearchLink(pName, fullTitle);
-                            let pText = '구독(무료)';
-                            if (pName === 'Netflix' && fullTitle.includes('나 홀로 집에')) {
-                                pText += '\n광고형 멤버십 이용 불가';
-                            }
-                            providers.push({ provider_name: pName, text: pText, price: 0, type: 'flatrate', link: directLink || kr.link });
-                        }
-                    });
-                    if (kr.buy) kr.buy.forEach(p => {
-                        const pName = normalizeProvider(p.provider_name);
-                        if (!existingProviders.has(pName)) {
-                            const directLink = getProviderSearchLink(pName, fullTitle);
-                            providers.push({ provider_name: pName, text: 'OTT 앱에서 확인(구매)', price: 99999, type: 'buy', link: directLink || kr.link });
-                        }
-                    });
-                    if (kr.rent) kr.rent.forEach(p => {
-                        const pName = normalizeProvider(p.provider_name);
-                        if (!existingProviders.has(pName)) {
-                            const directLink = getProviderSearchLink(pName, fullTitle);
-                            providers.push({ provider_name: pName, text: 'OTT 앱에서 확인(대여)', price: 99998, type: 'rent', link: directLink || kr.link });
+                    const existingNames = new Set(providers.map(p => p.provider_name));
+                    ['flatrate', 'buy', 'rent'].forEach(cat => {
+                        if (kr[cat]) {
+                            kr[cat].forEach(p => {
+                                const pName = normalizeProvider(p.provider_name);
+                                if (!existingNames.has(pName)) {
+                                    const directLink = getProviderSearchLink(pName, fullTitle);
+                                    providers.push({
+                                        provider_name: pName,
+                                        text: cat === 'flatrate' ? '구독(무료)' : `앱에서 확인(${cat === 'buy' ? '구매' : '대여'})`,
+                                        price: cat === 'flatrate' ? 0 : 99999,
+                                        type: cat,
+                                        link: directLink || kr.link
+                                    });
+                                    existingNames.add(pName);
+                                }
+                            });
                         }
                     });
                 }
-            } catch (e) {
-                console.warn(`TMDB Provider lookup failed for ${item.id}:`, e);
-            }
+            } catch (e) { }
 
-            // D. Apply Manual Data Patches (Highest Authority - Merges and Fixes API data)
-            if (KR_DATA_PATCHES[item.id]) {
-                const patchData = KR_DATA_PATCHES[item.id];
-                const patches = Array.isArray(patchData)
-                    ? patchData
-                    : (patchData.patches ? patchData.patches : (patchData.ott ? [patchData] : []));
-                const excludes = patchData.excludes || [];
-
-                // 1. Filter out excluded providers
-                if (excludes.length > 0) {
-                    providers = providers.filter(p => !excludes.includes(p.provider_name));
-                }
-
-                // 2. Overwrite existing or add new from patches
-                patches.forEach(patch => {
-                    const existingIdx = providers.findIndex(p => p.provider_name === patch.ott);
-                    const patchObj = {
-                        provider_name: patch.ott,
-                        text: patch.text,
-                        price: patch.price || 0,
-                        type: patch.type || 'subscription',
-                        link: patch.link
-                    };
-                    if (existingIdx !== -1) {
-                        providers[existingIdx] = patchObj;
-                    } else {
-                        providers.push(patchObj);
-                    }
+            // C. Coupang Play Smart Fallback
+            if (!providers.some(p => p.provider_name === 'Coupang Play')) {
+                providers.push({
+                    provider_name: 'Coupang Play',
+                    text: '앱에서 확인(검색)',
+                    price: 999999,
+                    type: 'search',
+                    link: getProviderSearchLink('Coupang Play', fullTitle)
                 });
             }
 
-            for (const p of providers) {
-                if (!results.some(r => r.title === fullTitle && r.ott === p.provider_name)) {
-                    results.push({
-                        id: `res-fixed-${item.id}-${p.provider_name}`,
+            // D. Manual Patches
+            if (KR_DATA_PATCHES[item.id]) {
+                const patchData = KR_DATA_PATCHES[item.id];
+                const patches = Array.isArray(patchData) ? patchData : (patchData.patches || (patchData.ott ? [patchData] : []));
+                const excludes = patchData.excludes || [];
+
+                providers = providers.filter(p => !excludes.includes(p.provider_name));
+                patches.forEach(patch => {
+                    const idx = providers.findIndex(p => p.provider_name === patch.ott);
+                    const obj = { provider_name: patch.ott, text: patch.text, price: patch.price || 0, type: patch.type || 'subscription', link: patch.link };
+                    if (idx !== -1) providers[idx] = obj;
+                    else providers.push(obj);
+                });
+            }
+
+            providers.forEach(p => {
+                if (!finalResults.some(r => r.title === fullTitle && r.ott === p.provider_name)) {
+                    finalResults.push({
+                        id: `res-final-${item.id}-${p.provider_name}`,
                         title: fullTitle,
                         ott: p.provider_name,
                         price: p.price,
@@ -340,22 +304,19 @@ export const searchOTT = async (query) => {
                         link: p.link
                     });
                 }
-            }
+            });
         }
-        return results.sort((a, b) => {
+
+        return finalResults.sort((a, b) => {
             const aMatch = a.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
             const bMatch = b.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
             if (aMatch && !bMatch) return -1;
             if (!aMatch && bMatch) return 1;
-
-            const titleA = a.title.replace(/\s/g, '');
-            const titleB = b.title.replace(/\s/g, '');
-            if (titleA.substring(0, 4) !== titleB.substring(0, 4)) return titleA.localeCompare(titleB, 'ko', { numeric: true });
-            if (a.release_date !== b.release_date) return a.release_date.localeCompare(b.release_date);
+            if (a.release_date !== b.release_date) return b.release_date.localeCompare(a.release_date);
             return a.price - b.price;
         });
     } catch (error) {
-        console.error("Search Error:", error);
+        console.error("Search API Error:", error);
         return [];
     }
 };

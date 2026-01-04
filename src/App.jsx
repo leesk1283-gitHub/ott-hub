@@ -30,6 +30,7 @@ function App() {
     const [recommendedKeywords, setRecommendedKeywords] = useState([])
     const [displaySearchTerm, setDisplaySearchTerm] = useState('')
     const inputRef = useRef(null)
+    const resultsRef = useRef(null)
 
     useEffect(() => {
         const keywords = [
@@ -54,6 +55,12 @@ function App() {
         }
         return () => clearInterval(interval);
     }, [isSearching]);
+
+    useEffect(() => {
+        if (hasSearched && resultsRef.current) {
+            resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [hasSearched, displaySearchTerm]);
 
     useEffect(() => {
         localStorage.setItem('recent_searches', JSON.stringify(recentSearches))
@@ -91,6 +98,9 @@ function App() {
         setDisplaySearchTerm(searchTerm)
         addToRecent(searchTerm)
 
+        // Hide keyboard on mobile
+        if (inputRef.current) inputRef.current.blur();
+
         try {
             const data = await searchOTT(searchTerm)
             setResults(data)
@@ -110,6 +120,9 @@ function App() {
         setHasSearched(true)
         setDisplaySearchTerm(kw)
         addToRecent(kw)
+
+        // Hide keyboard on mobile
+        if (inputRef.current) inputRef.current.blur();
         setTimeout(async () => {
             const data = await searchOTT(kw)
             setResults(data)
@@ -287,6 +300,7 @@ function App() {
                             animate={{ opacity: 1, y: 0 }}
                             className="results-wrapper"
                             style={{ width: '100%' }}
+                            ref={resultsRef}
                         >
                             <div className="results-header">
                                 <div>
