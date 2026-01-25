@@ -248,17 +248,30 @@ export const searchOTT = async (query) => {
         }
 
         // ADDED: Search Coupang Play via lightweight request (CORS Proxy used for browser environment)
+        // Optimized: Using corsproxy.io for reliability and better matching
         try {
-            const cpSearchUrl = `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(queryClean)}`;
-            const cpRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(cpSearchUrl)}`);
+            const cpSearchUrl = `https://www.coupangplay.com/search?keyword=${encodeURIComponent(queryClean)}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(cpSearchUrl)}`;
+            const cpRes = await fetch(proxyUrl);
+
             if (cpRes.ok) {
-                const cpInfo = await cpRes.json();
-                const html = cpInfo.contents || '';
-                // Check if title appears in search results or page content
-                if (html.includes(queryClean) || html.includes(itemsToProcess[0]?.title)) {
-                    const isStore = html.includes('스토어') || html.includes('구매');
+                const html = await cpRes.text();
+                if (html.length > 20000) { // Check if we actually got the page shell
                     const firstItem = itemsToProcess[0];
-                    if (firstItem) {
+                    const h = html.toLowerCase().replace(/\s/g, '');
+                    const q = queryClean.toLowerCase().replace(/\s/g, '');
+                    const t0 = (firstItem?.title || '').toLowerCase().replace(/\s/g, '');
+                    const t0Eng = (firstItem?.original_title || '').toLowerCase().replace(/\s/g, '');
+
+                    // Content exists check: title, input, or original title found in the page source
+                    // Note: Coupang Play often includes results in JSON blocks within script tags
+                    const isFound = (q && h.includes(q)) ||
+                        (t0 && h.includes(t0)) ||
+                        (t0Eng && h.includes(t0Eng));
+
+                    if (isFound && firstItem) {
+                        const isStore = html.includes('스토어') || html.includes('구매') || html.includes('store');
+
                         finalResults.push({
                             id: `res-cp-${firstItem.id}`,
                             title: firstItem.title || firstItem.name,
