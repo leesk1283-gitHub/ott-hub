@@ -198,37 +198,43 @@ export const searchOTT = async (query) => {
                 }
             } catch (e) { }
 
-            // C. Coupang Play Discovery (NEW: Extended depth and Naver Price lookup)
+            // C. Coupang Play Discovery (Real-Time Price & Deep Linking)
             try {
-                // Check top 6 items to ensure sequels/collections are found
                 const itemIndex = priorityItems.indexOf(item);
                 if (itemIndex < 6 && !providersMap.has('Coupang Play')) {
                     const jwSearchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(fullTitle)}`;
                     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(jwSearchUrl)}`;
                     const cpRes = await fetch(proxyUrl);
                     if (cpRes.ok) {
-                        const html = await cpRes.text();
-                        if (html.includes('coupang-play')) {
-                            // Existence confirmed. Now get EXACT price from Naver Search
-                            let cpPriceStr = html.includes('FLATRATE') ? '와우 회원 무료' : '앱에서 확인';
-                            let cpPriceVal = html.includes('FLATRATE') ? 0 : 5000;
-                            let isStore = !html.includes('FLATRATE');
+                        const jwHtml = await cpRes.text();
+                        if (jwHtml.includes('coupang-play')) {
+                            let cpPriceStr = jwHtml.includes('FLATRATE') ? '와우 회원 무료' : '앱에서 확인';
+                            let cpPriceVal = jwHtml.includes('FLATRATE') ? 0 : 5000;
+                            let isStore = !jwHtml.includes('FLATRATE');
 
+                            // Extraction via Naver for precise store pricing
                             try {
                                 const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 쿠팡플레이 가격")}`;
                                 const navRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(naverUrl)}`);
                                 if (navRes.ok) {
                                     const navHtml = await navRes.text();
-                                    // Extract price near "쿠팡플레이" while avoiding head/meta
-                                    const bodyIdx = navHtml.indexOf('<body');
-                                    const bodyText = bodyIdx !== -1 ? navHtml.substring(bodyIdx) : navHtml;
+                                    const bIdx = navHtml.indexOf('<body');
+                                    const bodyText = bIdx !== -1 ? navHtml.substring(bIdx) : navHtml;
 
-                                    const pattern = /쿠팡플레이.*?([0-9,]+)\s?원/s;
-                                    const match = bodyText.match(pattern);
-                                    if (match) {
-                                        cpPriceStr = `개별구매 ${match[1]}원`;
-                                        cpPriceVal = parseInt(match[1].replace(/,/g, ''));
-                                        isStore = true;
+                                    // Search specifically for CP price block
+                                    const cpIdx = bodyText.indexOf('쿠팡플레이');
+                                    if (cpIdx !== -1) {
+                                        const context = bodyText.substring(cpIdx - 50, cpIdx + 300);
+                                        const priceMatch = context.match(/([0-9,]{3,})\s?원/);
+                                        if (priceMatch) {
+                                            const pVal = parseInt(priceMatch[1].replace(/,/g, ''));
+                                            // Movie price sanity check: typically between 500 and 20,000 KRW
+                                            if (pVal > 100 && pVal < 30000) {
+                                                cpPriceStr = `개별구매 ${pVal.toLocaleString()}원`;
+                                                cpPriceVal = pVal;
+                                                isStore = true;
+                                            }
+                                        }
                                     }
                                 }
                             } catch (e) { }
@@ -238,7 +244,7 @@ export const searchOTT = async (query) => {
                                 texts: [cpPriceStr],
                                 prices: [cpPriceVal],
                                 type: isStore ? 'buy' : 'subscription',
-                                link: `https://www.coupangplay.com/search?keyword=${encodeURIComponent(fullTitle)}`
+                                link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
                             });
                         }
                     }
