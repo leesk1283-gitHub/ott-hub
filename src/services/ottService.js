@@ -9,24 +9,8 @@ const TMDB_API_KEY = 'eb11bb474eef7856758589fb09e65c29';
 const RAPID_API_KEY = 'fdd47c2553mshd19015530c43e2cp1a9d7djsn31c6ad035190';
 const RAPID_API_HOST = 'streaming-availability.p.rapidapi.com';
 
-// Targeted Correction Layer (Only for verified direct links or API error corrections)
-const KR_DATA_PATCHES = {
-    // Zootopia
-    269149: [
-        { ott: 'Coupang Play', text: 'OTT 앱에서 확인(구매)', type: 'buy', price: 99999, link: 'https://www.coupangplay.com/query?src=page_search&keyword=%EC%A3%BC%ED%86%A0%ED%94%BC%EC%95%84' }
-    ],
-    // 나 홀로 집에 (Home Alone)
-    771: [
-        { ott: 'Apple TV', text: '대여 2,500원 / 구매 5,000원', type: 'buy', price: 2500, link: 'https://tv.apple.com/kr/movie/%EB%82%98-%ED%99%80%EB%A1%9C-%EC%A7%91%EC%97%90/umc.cmc.25iylu09f7scc2q78672d6v86' },
-        { ott: 'Google Play', text: '대여 1,500원 / 구매 5,500원', type: 'buy', price: 1500, link: 'https://play.google.com/store/search?q=%EB%82%98%ED%99%80%EB%A1%9C%EC%A7%91%EC%97%90&c=movies' },
-        { ott: 'YouTube', text: '대여 1,500원 / 구매 5,500원', type: 'buy', price: 1500, link: 'https://www.youtube.com/results?search_query=%EB%82%98%ED%99%80%EB%A1%9C%EC%A7%91%EC%97%90+%EA%B5%AC%EB%A7%A4' }
-    ],
-    // 나 홀로 집에 2
-    772: [
-        { ott: 'Apple TV', text: '대여 2,500원 / 구매 5,500원', type: 'buy', price: 2500, link: 'https://tv.apple.com/kr/movie/%EB%82%98-%ED%99%80%EB%A1%9C-%EC%A7%91%EC%97%90-2-%EB%89%B4%EC%9A%95%EC%9D%84-%ED%97%A4%EB%A7%A4%EB%8B%A4/umc.cmc.1i85r5v8o278t0d7yuj385e0m' },
-        { ott: 'Google Play', text: '대여 1,500원 / 구매 5,500원', type: 'buy', price: 1500, link: 'https://play.google.com/store/search?q=%EB%82%98%ED%99%80%EB%A1%9C%EC%A7%91%EC%97%902&c=movies' }
-    ]
-};
+// Targeted Correction Layer (Removed manual patches as requested for real-time accuracy)
+const KR_DATA_PATCHES = {};
 
 /**
  * Fetch streaming data from Streaming Availability API via TMDB ID
