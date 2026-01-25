@@ -198,37 +198,40 @@ export const searchOTT = async (query) => {
                 }
             } catch (e) { }
 
-            // C. Coupang Play Discovery (Real-Time Price & Deep Linking)
+            // C. Coupang Play Discovery (NEW: Store vs Free Corrected)
             try {
                 const itemIndex = priorityItems.indexOf(item);
-                if (itemIndex < 6 && !providersMap.has('Coupang Play')) {
-                    const jwSearchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(fullTitle)}`;
-                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(jwSearchUrl)}`;
+                if (itemIndex < 10 && !providersMap.has('Coupang Play')) {
+                    // Check search result for markers
+                    const cpSearchUrl = `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`;
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(cpSearchUrl)}`;
                     const cpRes = await fetch(proxyUrl);
                     if (cpRes.ok) {
-                        const jwHtml = await cpRes.text();
-                        if (jwHtml.includes('coupang-play')) {
-                            let cpPriceStr = jwHtml.includes('FLATRATE') ? '와우 회원 무료' : '앱에서 확인';
-                            let cpPriceVal = jwHtml.includes('FLATRATE') ? 0 : 5000;
-                            let isStore = !jwHtml.includes('FLATRATE');
+                        const html = await cpRes.text();
+                        // Marker that CP has this item at all
+                        if (html.includes('스토어') || html.includes('와우') || html.includes('titles') || html.includes('play')) {
 
-                            // Extraction via Naver for precise store pricing
+                            // Highly reliable Store Detection
+                            // In Coupang search source, Store items are clearly separated by "스토어" or "개별구매" strings
+                            let cpPriceStr = "앱에서 확인";
+                            let cpPriceVal = 5000;
+                            let isStore = html.toLowerCase().includes('스토어') || html.includes('개별구매') || html.includes('badge_buy');
+
+                            // Extraction via Naver for precise pricing if detected as store
                             try {
-                                const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 쿠팡플레이 가격")}`;
+                                const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 쿠팡플레이 개별구매")}`;
                                 const navRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(naverUrl)}`);
                                 if (navRes.ok) {
                                     const navHtml = await navRes.text();
-                                    const bIdx = navHtml.indexOf('<body');
-                                    const bodyText = bIdx !== -1 ? navHtml.substring(bIdx) : navHtml;
+                                    const bodyIdx = navHtml.indexOf('<body');
+                                    const bodyText = bodyIdx !== -1 ? navHtml.substring(bodyIdx) : navHtml;
 
-                                    // Search specifically for CP price block
                                     const cpIdx = bodyText.indexOf('쿠팡플레이');
                                     if (cpIdx !== -1) {
                                         const context = bodyText.substring(cpIdx - 50, cpIdx + 300);
                                         const priceMatch = context.match(/([0-9,]{3,})\s?원/);
                                         if (priceMatch) {
                                             const pVal = parseInt(priceMatch[1].replace(/,/g, ''));
-                                            // Movie price sanity check: typically between 500 and 20,000 KRW
                                             if (pVal > 100 && pVal < 30000) {
                                                 cpPriceStr = `개별구매 ${pVal.toLocaleString()}원`;
                                                 cpPriceVal = pVal;
@@ -239,13 +242,36 @@ export const searchOTT = async (query) => {
                                 }
                             } catch (e) { }
 
-                            providersMap.set('Coupang Play', {
-                                name: 'Coupang Play',
-                                texts: [cpPriceStr],
-                                prices: [cpPriceVal],
-                                type: isStore ? 'buy' : 'subscription',
-                                link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
-                            });
+                            // If No store indicators and JustWatch says FLATRATE, then it's free
+                            if (cpPriceStr === "앱에서 확인") {
+                                const jwSearchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(fullTitle)}`;
+                                const jwRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(jwSearchUrl)}`);
+                                if (jwRes.ok) {
+                                    const jwHtml = await jwRes.text();
+                                    if (jwHtml.includes('coupang-play')) {
+                                        const cpIdx = jwHtml.indexOf('coupang-play');
+                                        const snippet = jwHtml.substring(cpIdx, cpIdx + 500);
+                                        if (snippet.includes('FLATRATE')) {
+                                            cpPriceStr = '와우 회원 무료';
+                                            cpPriceVal = 0;
+                                            isStore = false;
+                                        } else if (snippet.includes('BUY') || snippet.includes('RENT')) {
+                                            isStore = true;
+                                            cpPriceStr = '와우 회원 전용(구매)';
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!providersMap.has('Coupang Play')) {
+                                providersMap.set('Coupang Play', {
+                                    name: 'Coupang Play',
+                                    texts: [cpPriceStr],
+                                    prices: [cpPriceVal],
+                                    type: isStore ? 'buy' : 'subscription',
+                                    link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
+                                });
+                            }
                         }
                     }
                 }
