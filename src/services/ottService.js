@@ -134,85 +134,17 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // C. Coupang Play - 서버리스 API를 통한 실시간 검색
-            try {
-                // Step 1: 서버리스 API로 쿠팡 검색 시도
-                let verified = false;
-                let cpPrice = null;
-                let cpIsFree = false;
-                let isFallback = false;
-
+            // C. Coupang Play - 무조건 노출 정책 (검색어와 유사하면 기본 제공)
+            if (!providersMap.has('Coupang Play')) {
+                // 서버 API 호출 시도 (가격 확인용)
                 try {
                     const apiUrl = `/api/coupang-search?title=${encodeURIComponent(fullTitle)}`;
-                    const cpRes = await fetch(apiUrl, { signal: AbortSignal.timeout(10000) });
+                    const cpRes = await fetch(apiUrl, { signal: AbortSignal.timeout(5000) });
+                    const cpData = cpRes.ok ? await cpRes.json() : { exists: true, fallback: true };
 
-                    if (cpRes.ok) {
-                        const cpData = await cpRes.json();
-                        verified = cpData.exists; // 서버가 명시적으로 false라고 하면 false임
-                        cpPrice = cpData.rawPrice;
-                        cpIsFree = cpData.isFree;
-                        isFallback = cpData.fallback || false;
-                    } else {
-                        // API 자체 에러(500 등)인 경우 -> 있을 가능성이 높으므로 Fallback 표시
-                        verified = true;
-                        isFallback = true;
-                    }
-                } catch (e) {
-                    // 네트워크 에러나 타임아웃 시 -> Fallback 표시
-                    verified = true;
-                    isFallback = true;
-                }
-
-                if (verified) {
-                    // ... (이하 동일 로직)
-                    // Step 3: 서버 데이터 우선 사용, 없으면 JustWatch 백업
-                    let isFree = cpIsFree;
-                    let priceVal = cpPrice || 5000;
-                    let priceText = '개별구매';
-
-                    if (cpPrice !== null) {
-                        // 서버에서 가격을 찾은 경우
-                        priceText = `개별구매 ${cpPrice.toLocaleString()}원`;
-                    } else if (cpIsFree) {
-                        // 서버에서 무료로 확인된 경우
-                        isFree = true;
-                        priceText = '와우 회원 무료';
-                        priceVal = 0;
-                    } else if (isFallback) {
-                        // 쿠팡 서버가 봇을 차단한 경우 (Fallback)
-                        // JustWatch 확인 없이 안전하게 표시 (오차단 방지보다 표시 우선)
-                        // TMDB에서 무료(flatrate)라고 했으면 무료로, 아니면 개별구매로 표시
-                        isFree = kr?.flatrate?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play') || false;
-
-                        if (isFree) {
-                            priceText = '와우 회원 무료';
-                            priceVal = 0;
-                        } else {
-                            priceText = '개별구매';
-                            priceVal = 5000;
-                        }
-                    } else {
-                        // 서버 데이터가 불충분하면 JustWatch로 재확인 (백업)
-                        try {
-                            const jwUrl = `https://corsproxy.io/?${encodeURIComponent('https://www.justwatch.com/kr/검색?q=' + fullTitle)}`;
-                            const jwRes = await fetch(jwUrl, { signal: AbortSignal.timeout(3000) });
-                            if (jwRes.ok) {
-                                const jwHtml = await jwRes.text();
-                                if (jwHtml.includes('coupang-play')) {
-                                    const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
-                                    isFree = cpSnip.includes('FLATRATE');
-                                }
-                            }
-                        } catch (e) {
-                            // JustWatch 실패 시 TMDB로 판별
-                            isFree = kr?.flatrate?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play') || false;
-                        }
-
-                        if (isFree) {
-                            priceText = '와우 회원 무료';
-                            priceVal = 0;
-                        }
-                    }
+                    const isFree = cpData.isFree || false;
+                    const priceText = cpData.priceText || (cpData.fallback ? '개별구매' : '개별구매');
+                    const priceVal = cpData.rawPrice || (isFree ? 0 : 5000);
 
                     providersMap.set('Coupang Play', {
                         name: 'Coupang Play',
@@ -221,9 +153,16 @@ export const searchOTT = async (query) => {
                         type: isFree ? 'subscription' : 'buy',
                         link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
                     });
+                } catch (e) {
+                    // 서버 API 실패해도 쿠팡플레이는 항상 목록에 추가
+                    providersMap.set('Coupang Play', {
+                        name: 'Coupang Play',
+                        texts: ['개별구매'],
+                        prices: [5000],
+                        type: 'buy',
+                        link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
+                    });
                 }
-            } catch (e) {
-                console.error('Coupang Play processing error:', e);
             }
 
             // Final consolidation (아이템별 수집 완료 후 맵에서 최종 결과 배열로 복사)
@@ -231,24 +170,20 @@ export const searchOTT = async (query) => {
                 const combinedText = info.texts.join(' / ');
                 const lowestPrice = Math.min(...info.prices);
 
-                // 중복 체크 로직 개선: 제목과 OTT 이름이 모두 정확히 일치할 때만 보수적으로 스킵
-                const alreadyExists = finalResults.some(r =>
-                    r.title === fullTitle && r.ott === pName
-                );
+                // 고유 ID 생성 (pName이 한글인 경우 대비하여 encode)
+                const safeName = pName.replace(/\+/g, 'plus').replace(/\s+/g, '');
 
-                if (!alreadyExists) {
-                    finalResults.push({
-                        id: `v7-${item.id}-${pName.replace(/\s+/g, '')}`,
-                        title: fullTitle,
-                        ott: pName,
-                        price: lowestPrice,
-                        priceText: combinedText,
-                        image: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '',
-                        description: item.overview ? item.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
-                        release_date: item.release_date || item.first_air_date || '0000-00-00',
-                        link: info.link
-                    });
-                }
+                finalResults.push({
+                    id: `v8-${item.id}-${safeName}`,
+                    title: fullTitle,
+                    ott: pName,
+                    price: lowestPrice,
+                    priceText: combinedText,
+                    image: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '',
+                    description: item.overview ? item.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
+                    release_date: item.release_date || item.first_air_date || '0000-00-00',
+                    link: info.link
+                });
             });
         }
 
