@@ -129,72 +129,28 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // C. Coupang Play - Hyper-Aggressive Real-Time Engine (V6)
+            // C. Coupang Play - A안: 간소화된 존재 감지 (Simplified Presence Detection)
+            // 상세 페이지는 로그인 필요 → 정확한 가격 추출 불가
+            // JustWatch FLATRATE 마커로 무료/유료만 판별하고, 유료는 "앱에서 확인" 안내
             try {
                 if (!providersMap.has('Coupang Play')) {
-                    // Stage 1: Fast existence check (JustWatch)
+                    // JustWatch에서 쿠팡플레이 존재 여부 확인
                     const jwUrl = `https://corsproxy.io/?${encodeURIComponent('https://www.justwatch.com/kr/검색?q=' + fullTitle)}`;
                     const jwRes = await fetch(jwUrl);
                     if (jwRes.ok) {
                         const jwHtml = await jwRes.text();
                         if (jwHtml.includes('coupang-play')) {
-                            let cpPriceStr = "가격 확인 중...";
-                            let cpPriceVal = 5000;
-                            let isStore = true;
 
-                            // Stage 2: Parallel Search (Naver Mobile + Search result text)
-                            try {
-                                const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 쿠팡플레이 가격")}`;
-                                const navProxy = `https://corsproxy.io/?${encodeURIComponent(naverUrl)}`;
-                                const navRes = await fetch(navProxy);
-                                if (navRes.ok) {
-                                    const navHtml = await navRes.text();
-
-                                    // Search specifically in <body> and ignore 126-byte stub results
-                                    if (navHtml.length > 500) {
-                                        // Scan ALL occurrences of "쿠팡플레이" in the body text
-                                        const bStart = navHtml.indexOf('<body');
-                                        const bText = bStart !== -1 ? navHtml.substring(bStart) : navHtml;
-
-                                        // We look for currency pattern in a 1000ch range around "쿠팡"
-                                        const cpMatches = [...bText.matchAll(/쿠팡플레이/g)];
-                                        for (const match of cpMatches) {
-                                            const context = bText.substring(match.index - 100, match.index + 800).replace(/<[^>]*>/g, ' ');
-                                            const priceMatch = context.match(/([0-9,]{3,})\s?원/);
-                                            if (priceMatch) {
-                                                const pVal = parseInt(priceMatch[1].replace(/,/g, ''));
-                                                if (pVal > 100 && pVal < 50000) {
-                                                    cpPriceStr = `개별구매 ${pVal.toLocaleString()}원`;
-                                                    cpPriceVal = pVal;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (e) { }
-
-                            // Stage 3: Fallback logic (No price found)
-                            if (cpPriceStr.includes('확인 중')) {
-                                // If JustWatch explicitly says FLATRATE for this movie, show free
-                                const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
-                                if (cpSnip.includes('FLATRATE')) {
-                                    cpPriceStr = '와우 회원 무료';
-                                    cpPriceVal = 0;
-                                    isStore = false;
-                                } else {
-                                    // Check for purchase indicator
-                                    cpPriceStr = '개별구매(앱에서 가격 확인)';
-                                    isStore = true;
-                                }
-                            }
+                            // Simplified: JustWatch FLATRATE 마커만으로 무료/유료 판별
+                            const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
+                            const isFree = cpSnip.includes('FLATRATE');
 
                             providersMap.set('Coupang Play', {
                                 name: 'Coupang Play',
-                                texts: [cpPriceStr],
-                                prices: [cpPriceVal],
-                                type: isStore ? 'buy' : 'subscription',
-                                link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
+                                texts: [isFree ? '와우 회원 무료' : '개별구매(앱에서 가격 확인)'],
+                                prices: [isFree ? 0 : 5000],
+                                type: isFree ? 'subscription' : 'buy',
+                                link: `https://www.coupangplay.com/search?keyword=${encodeURIComponent(fullTitle)}`
                             });
                         }
                     }
