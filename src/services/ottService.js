@@ -247,48 +247,42 @@ export const searchOTT = async (query) => {
             });
         }
 
-        // ADDED: Search Coupang Play via lightweight request (CORS Proxy used for browser environment)
-        // Optimized: Using corsproxy.io for reliability and better matching
+        // ADDED: Search Coupang Play via JustWatch detection (Highly reliable)
         try {
-            const cpSearchUrl = `https://www.coupangplay.com/search?keyword=${encodeURIComponent(queryClean)}`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(cpSearchUrl)}`;
+            const jwSearchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(queryClean)}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(jwSearchUrl)}`;
             const cpRes = await fetch(proxyUrl);
 
             if (cpRes.ok) {
                 const html = await cpRes.text();
-                if (html.length > 20000) { // Check if we actually got the page shell
+                // Check for Coupang Play markers in JustWatch results
+                if (html.includes('coupang-play')) {
                     const firstItem = itemsToProcess[0];
-                    const h = html.toLowerCase().replace(/\s/g, '');
-                    const q = queryClean.toLowerCase().replace(/\s/g, '');
-                    const t0 = (firstItem?.title || '').toLowerCase().replace(/\s/g, '');
-                    const t0Eng = (firstItem?.original_title || '').toLowerCase().replace(/\s/g, '');
-
-                    // Content exists check: title, input, or original title found in the page source
-                    // Note: Coupang Play often includes results in JSON blocks within script tags
-                    const isFound = (q && h.includes(q)) ||
-                        (t0 && h.includes(t0)) ||
-                        (t0Eng && h.includes(t0Eng));
-
-                    if (isFound && firstItem) {
-                        const isStore = html.includes('스토어') || html.includes('구매') || html.includes('store');
+                    if (firstItem) {
+                        // Determine if it's 'Flatrate' (membership free) or 'Buy/Rent' (store)
+                        // Search for the snippet near 'coupang-play'
+                        const cpIdx = html.indexOf('coupang-play');
+                        const snippet = html.substring(cpIdx, cpIdx + 300);
+                        const isFlatrate = snippet.includes('FLATRATE');
+                        const isBuyRent = snippet.includes('BUY') || snippet.includes('RENT');
 
                         finalResults.push({
                             id: `res-cp-${firstItem.id}`,
                             title: firstItem.title || firstItem.name,
                             ott: 'Coupang Play',
                             price: 0,
-                            priceText: isStore ? '와우 회원 전용(구매)' : '와우 회원 무료',
+                            priceText: isFlatrate ? '와우 회원 무료' : (isBuyRent ? '와우 회원 전용(구매)' : '앱에서 확인'),
                             image: firstItem.poster_path ? `${TMDB_IMAGE_BASE}${firstItem.poster_path}` : '',
                             description: firstItem.overview ? firstItem.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
                             release_date: firstItem.release_date || firstItem.first_air_date || '0000-00-00',
-                            link: cpSearchUrl,
+                            link: `https://www.coupangplay.com/search?keyword=${encodeURIComponent(queryClean)}`,
                             note: null
                         });
                     }
                 }
             }
         } catch (e) {
-            console.warn("Coupang Play search failed:", e);
+            console.warn("Coupang Play discovery failed:", e);
         }
 
         return finalResults
