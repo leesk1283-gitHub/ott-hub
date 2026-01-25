@@ -5,6 +5,12 @@
   color-scheme: dark;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -12,11 +18,19 @@ body {
   color: #ffffff;
   min-height: 100vh;
   overflow-x: hidden;
+  user-select: none;
+  /* Prevent selection globally as requested */
+  cursor: default;
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {
@@ -160,12 +174,14 @@ body {
   width: 100%;
   margin-top: 40px;
   margin-bottom: 80px;
+  cursor: default;
+  user-select: none;
 }
 
 .ott-table th {
   background-color: rgba(255, 255, 255, 0.02);
   padding: 20px 24px;
-  text-align: left;
+  text-align: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   background-clip: padding-box;
@@ -176,9 +192,14 @@ body {
   text-align: right;
 }
 
+/* Desktop widths */
+.th-price {
+  width: 360px;
+}
+
 .ott-table th span {
   font-family: 'Outfit', sans-serif;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -201,17 +222,42 @@ body {
   text-align: right;
 }
 
+.ott-table th:last-child {
+  border-right: none;
+  text-align: right;
+}
+
 .ott-table tr {
-  cursor: pointer;
   transition: background 0.2s, transform 0.1s;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .ott-table tr:hover {
   background-color: rgba(59, 130, 246, 0.05);
 }
 
-.ott-table tr:active {
+.ott-table tbody tr:active {
   transform: scale(0.995);
+}
+
+.ott-table thead:active,
+.ott-table th:active {
+  transform: none !important;
+  transition: none !important;
+}
+
+.ott-table,
+.ott-table * {
+  cursor: default !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* Re-enable pointer for clickable items */
+.ott-price-row,
+.ott-price-row * {
+  cursor: pointer !important;
 }
 
 .no-cell {
@@ -219,7 +265,7 @@ body {
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
   font-size: 18px;
-  width: 60px;
+  width: 40px;
   background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -297,9 +343,19 @@ tr:hover .poster-img {
 .ott-badge {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-weight: 600;
   color: #d1d5db;
+}
+
+.content-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.text-info {
+  flex: 1;
 }
 
 .price-tag {
@@ -309,10 +365,42 @@ tr:hover .poster-img {
   white-space: pre-line;
   text-align: right;
   line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.price-note {
+  font-size: 11px;
+  color: #ef4444;
+  /* Red color for warning */
+  font-weight: 400;
+  margin-top: 2px;
 }
 
 .price-tag.free {
   color: #4ade80;
+}
+
+/* Grouped OTT Services */
+.ott-price-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ott-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.2s;
+}
+
+.ott-price-row:hover {
+  background: rgba(59, 130, 246, 0.1);
 }
 
 .loader {
@@ -333,6 +421,13 @@ tr:hover .poster-img {
 @media (max-width: 768px) {
   .container {
     padding: 0 16px;
+    overflow-x: hidden;
+    /* Prevent container scroll */
+  }
+
+  .table-container {
+    width: 100%;
+    overflow-x: hidden;
   }
 
   .center-view {
@@ -374,37 +469,43 @@ tr:hover .poster-img {
     padding: 16px;
     position: relative;
     border-right: none !important;
+    width: 100%;
+    /* Force fit */
   }
 
   .no-cell {
     display: none !important;
   }
 
-  .image-cell {
-    float: left;
-    width: 64px !important;
-    margin-right: 16px;
+  /* Content Cell (Image + Title) */
+  .content-cell {
     padding: 0 !important;
-    border-bottom: none !important;
-    border-right: none !important;
+    border: none !important;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .content-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
   }
 
   .poster-wrapper {
     width: 64px;
     height: 96px;
+    flex-shrink: 0;
   }
 
-  .title-cell {
-    padding: 0 !important;
-    margin-bottom: 12px;
-    border-bottom: none !important;
-    border-right: none !important;
+  .text-info {
+    padding-top: 4px;
+    padding-left: 4px;
+    /* Added padding to prevent stuck to left */
   }
 
   .main-title {
     font-size: 16px !important;
     margin-bottom: 6px;
-    display: block;
   }
 
   .desc-text {
@@ -412,16 +513,25 @@ tr:hover .poster-img {
     color: #9ca3af;
   }
 
-  .ott-table td:nth-child(4),
-  .ott-table td:nth-child(5) {
-    display: inline-block;
-    width: auto;
-    padding: 0 !important;
-    margin-right: 16px;
-    margin-top: 4px;
-    border-bottom: none !important;
-    border-right: none !important;
-    text-align: left !important;
+  /* Mobile Layout - No fixed widths */
+  .th-content,
+  .th-price,
+  .ott-price-cell,
+  .content-cell {
+    width: 100% !important;
+    max-width: 100%;
+    display: block;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .th-price {
+    width: 100% !important;
+  }
+
+  .ott-price-row {
+    flex-wrap: wrap;
+    /* allow wrapping on very small screens */
   }
 
   .ott-badge {

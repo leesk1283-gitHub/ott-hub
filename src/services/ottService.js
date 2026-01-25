@@ -11,52 +11,8 @@ const RAPID_API_HOST = 'streaming-availability.p.rapidapi.com';
 
 // Targeted Correction Layer (Only for verified direct links or API error corrections)
 const KR_DATA_PATCHES = {
-    // Home Alone Series - User Verified Direct Links
-    771: { ott: 'Coupang Play', text: '5,500원(구매)', type: 'buy', price: 5500, link: 'https://www.coupangplay.com/titles/e88143a6-af03-4a76-a37e-ede8e3b1fc36' },
-    772: { ott: 'Coupang Play', text: '5,500원(구매)', type: 'buy', price: 5500, link: 'https://www.coupangplay.com/titles/9f62a88f-6e32-43ff-9ff4-da4526523edc' },
-    9714: { ott: 'Coupang Play', text: '5,500원(구매)', type: 'buy', price: 5500, link: 'https://www.coupangplay.com/titles/7611d2a3-b992-499b-a9cb-52370194d960' },
-
-    // The Worst of Evil - Verified Disney+ Link
-    210704: { ott: 'Disney+', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://www.disneyplus.com/series/the-worst-of-evil/29IM2a96KyDP' },
-
-    // Attack on Titan (진격의 거인) - Series and Movies Coverage Fix
-    1429: { // Main Series
-        patches: [
-            { ott: 'Netflix', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://www.netflix.com/title/70299043/' },
-            { ott: 'Watcha', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://watcha.com/search?query=%EC%A7%84%EA%B2%A9%EC%9D%98%20%EA%B1%B0%EC%9D%B8' },
-            { ott: 'wavve', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://www.wavve.com/search?searchWord=%EC%A7%84%EA%B2%A9%EC%9D%98%20%EA%B1%B0%EC%9D%B8' },
-            { ott: 'TVING', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://www.tving.com/search?keyword=%EC%A7%84%EA%B2%A9%EC%9D%98%20%EA%B1%B0%EC%9D%B8' }
-        ],
-        excludes: ['Apple TV']
-    },
-    379088: { // Crimson Bow and Arrow (홍련의 화살)
-        patches: [
-            { ott: 'Watcha', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://watcha.com/contents/mWJyLqx' },
-            { ott: 'wavve', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://www.wavve.com/search?searchWord=%EC%A7%84%EA%B2%A9%EC%9D%98%20%EA%B1%B0%EC%9D%B8%20%ED%99%8D%EB%A0%A8%EC%9D%98%20%ED%99%94%EC%82%B4' }
-        ],
-        excludes: ['Apple TV']
-    },
-    330081: { // Wings of Freedom (자유의 날개)
-        patches: [
-            { ott: 'TVING', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://www.tving.com/search?keyword=%EC%A7%84%EA%B2%A9%EC%9D%98%20%EA%B1%B0%EC%9D%B8%20%EC%9E%90%EC%9C%A0%EC%9D%98%20%EB%82%A0%EA%B0%9C' },
-            { ott: 'wavve', text: '구독(무료)', type: 'subscription', price: 0, link: 'https://www.wavve.com/search?searchWord=%EC%A7%84%EA%B2%A9%EC%9D%98%20%EA%B1%B0%EC%9D%B8%20%EC%9E%90%EC%9C%A0%EC%9D%98%20%EB%82%A0%EA%B0%9C' }
-        ],
-        excludes: ['Apple TV']
-    },
-    714194: { // Chronicle
-        excludes: ['Apple TV']
-    },
-    1333100: { // The Last Attack
-        excludes: ['Apple TV']
-    },
-    492999: { // Roar of Awakening (각성의 포효)
-        excludes: ['Apple TV']
-    },
-    269149: { // Zootopia
-        patches: [
-            { ott: 'Coupang Play', text: 'OTT 앱에서 확인(구매)', type: 'buy', price: 99999, link: 'https://www.coupangplay.com/query?src=page_search&keyword=%EC%A3%BC%ED%86%A0%ED%94%BC%EC%95%84' }
-        ]
-    }
+    // Zootopia
+    269149: { ott: 'Coupang Play', text: 'OTT 앱에서 확인(구매)', type: 'buy', price: 99999, link: 'https://www.coupangplay.com/query?src=page_search&keyword=%EC%A3%BC%ED%86%A0%ED%94%BC%EC%95%84' }
 };
 
 /**
@@ -264,18 +220,7 @@ export const searchOTT = async (query) => {
                 }
             } catch (e) { }
 
-            // C. Coupang Play Smart Fallback
-            if (!providers.some(p => p.provider_name === 'Coupang Play')) {
-                providers.push({
-                    provider_name: 'Coupang Play',
-                    text: '앱에서 확인(검색)',
-                    price: 999999,
-                    type: 'search',
-                    link: getProviderSearchLink('Coupang Play', fullTitle)
-                });
-            }
-
-            // D. Manual Patches
+            // D. Manual Patches (Refined to only trusted data)
             if (KR_DATA_PATCHES[item.id]) {
                 const patchData = KR_DATA_PATCHES[item.id];
                 const patches = Array.isArray(patchData) ? patchData : (patchData.patches || (patchData.ott ? [patchData] : []));
@@ -292,29 +237,43 @@ export const searchOTT = async (query) => {
 
             providers.forEach(p => {
                 if (!finalResults.some(r => r.title === fullTitle && r.ott === p.provider_name)) {
+                    let priceText = p.text;
+                    let note = null;
+
+                    if (priceText && (priceText.includes('광고') || priceText.includes('제한'))) {
+                        note = '광고형 제외';
+                        // If text is long (likely the warning message), replace it with standard subscription text
+                        if (priceText.length > 10) {
+                            priceText = '구독(무료)';
+                        }
+                    }
+
                     finalResults.push({
-                        id: `res-final-${item.id}-${p.provider_name}`,
+                        id: `res-prec-${item.id}-${p.provider_name}`,
                         title: fullTitle,
                         ott: p.provider_name,
                         price: p.price,
-                        priceText: p.text,
+                        priceText: priceText,
                         image: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '',
                         description: item.overview ? item.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
                         release_date: item.release_date || item.first_air_date || '0000-00-00',
-                        link: p.link
+                        link: p.link,
+                        note: note
                     });
                 }
             });
         }
 
-        return finalResults.sort((a, b) => {
-            const aMatch = a.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
-            const bMatch = b.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
-            if (aMatch && !bMatch) return -1;
-            if (!aMatch && bMatch) return 1;
-            if (a.release_date !== b.release_date) return b.release_date.localeCompare(a.release_date);
-            return a.price - b.price;
-        });
+        return finalResults
+            .filter(r => r.ott !== 'Coupang Play')
+            .sort((a, b) => {
+                const aMatch = a.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
+                const bMatch = b.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
+                if (aMatch && !bMatch) return -1;
+                if (!aMatch && bMatch) return 1;
+                if (a.release_date !== b.release_date) return b.release_date.localeCompare(a.release_date);
+                return a.price - b.price;
+            });
     } catch (error) {
         console.error("Search API Error:", error);
         return [];

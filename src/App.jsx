@@ -9,7 +9,6 @@ const ALL_OTT_LIST = [
     { id: 'Tving', name: '티빙' },
     { id: 'Wavve', name: '웨이브' },
     { id: 'Watcha', name: '왓챠' },
-    { id: 'Coupang Play', name: '쿠팡플레이' },
     { id: 'Apple TV', name: '애플 TV' },
     { id: 'Naver SeriesOn', name: '네이버 시리즈온' },
     { id: 'Google Play Movies', name: '구글 플레이' }
@@ -73,14 +72,39 @@ function App() {
     }, [selectedOtts])
 
     const filterResults = (allData) => {
-        if (selectedOtts.length === 0) {
-            setFilteredResults(allData)
-            return
+        let filtered = allData;
+        if (selectedOtts.length > 0) {
+            filtered = allData.filter(item =>
+                selectedOtts.some(ott => item.ott.toLowerCase().includes(ott.toLowerCase()))
+            );
         }
-        const filtered = allData.filter(item =>
-            selectedOtts.some(ott => item.ott.toLowerCase().includes(ott.toLowerCase()))
-        )
-        setFilteredResults(filtered)
+        // Group by title
+        const grouped = groupByTitle(filtered);
+        setFilteredResults(grouped);
+    }
+
+    const groupByTitle = (data) => {
+        const titleMap = new Map();
+        data.forEach(item => {
+            const key = item.title;
+            if (!titleMap.has(key)) {
+                titleMap.set(key, {
+                    id: item.id,
+                    title: item.title,
+                    image: item.image,
+                    description: item.description,
+                    release_date: item.release_date,
+                    ottServices: []
+                });
+            }
+            titleMap.get(key).ottServices.push({
+                ott: item.ott,
+                price: item.price,
+                priceText: item.priceText,
+                link: item.link
+            });
+        });
+        return Array.from(titleMap.values());
     }
 
     const addToRecent = (term) => {
@@ -322,15 +346,15 @@ function App() {
 
                             <div className="table-container">
                                 <table className="ott-table">
-                                    <thead>
-                                        <tr>
-                                            <th style={{ textAlign: 'center', width: '60px' }}><span>No.</span></th>
-                                            <th style={{ width: '100px' }}><span>이미지</span></th>
-                                            <th><span>제목 / 설명</span></th>
-                                            <th style={{ width: '180px' }}><span>OTT 서비스</span></th>
-                                            <th style={{ textAlign: 'right', width: '140px' }}><span>최저가</span></th>
-                                        </tr>
-                                    </thead>
+                                    {filteredResults.length > 0 && (
+                                        <thead>
+                                            <tr>
+                                                <th className="th-no" style={{ textAlign: 'center', width: '40px' }}><span>No.</span></th>
+                                                <th className="th-content" style={{ textAlign: 'center' }}><span>컨텐츠</span></th>
+                                                <th className="th-price" style={{ textAlign: 'center' }}><span>OTT 가격</span></th>
+                                            </tr>
+                                        </thead>
+                                    )}
                                     <tbody>
                                         {filteredResults.length > 0 ? (
                                             filteredResults.map((item, index) => (
@@ -339,54 +363,67 @@ function App() {
                                                     initial={{ opacity: 0 }}
                                                     animate={{ opacity: 1 }}
                                                     transition={{ delay: index * 0.05 }}
-                                                    onClick={() => item.link && window.open(item.link, '_blank')}
-                                                    title="클릭하여 OTT 사이트로 이동"
+                                                    style={{ cursor: 'default' }}
                                                 >
                                                     <td className="no-cell">{index + 1}</td>
-                                                    <td className="image-cell">
-                                                        <div className="poster-wrapper">
-                                                            {item.image && (
-                                                                <img
-                                                                    src={item.image}
-                                                                    alt={item.title}
-                                                                    className="poster-img"
-                                                                    onLoad={(e) => {
-                                                                        e.target.style.opacity = '1';
-                                                                    }}
-                                                                    onError={(e) => {
-                                                                        e.target.style.display = 'none';
-                                                                        const fallback = e.target.parentElement.querySelector('.poster-fallback');
-                                                                        if (fallback) fallback.style.display = 'flex';
-                                                                    }}
-                                                                    style={{ opacity: 0, transition: 'opacity 0.3s' }}
-                                                                />
-                                                            )}
-                                                            <div
-                                                                className="poster-fallback"
-                                                                style={{ display: !item.image ? 'flex' : 'none' }}
-                                                            >
-                                                                <span className="fallback-title">{item.title}</span>
-                                                                <span className="fallback-icon">🎬</span>
+                                                    <td className="content-cell">
+                                                        <div className="content-wrapper">
+                                                            <div className="poster-wrapper">
+                                                                {item.image && (
+                                                                    <img
+                                                                        src={item.image}
+                                                                        alt={item.title}
+                                                                        className="poster-img"
+                                                                        onLoad={(e) => {
+                                                                            e.target.style.opacity = '1';
+                                                                        }}
+                                                                        onError={(e) => {
+                                                                            e.target.style.display = 'none';
+                                                                            const fallback = e.target.parentElement.querySelector('.poster-fallback');
+                                                                            if (fallback) fallback.style.display = 'flex';
+                                                                        }}
+                                                                        style={{ opacity: 0, transition: 'opacity 0.3s' }}
+                                                                    />
+                                                                )}
+                                                                <div
+                                                                    className="poster-fallback"
+                                                                    style={{ display: !item.image ? 'flex' : 'none' }}
+                                                                >
+                                                                    <span className="fallback-title">{item.title}</span>
+                                                                    <span className="fallback-icon">🎬</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-info">
+                                                                <div className="main-title">{item.title}</div>
+                                                                <div className="desc-text line-clamp-2">{item.description}</div>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="title-cell">
-                                                        <div className="main-title">{item.title}</div>
-                                                        <div className="desc-text line-clamp-2">{item.description}</div>
-                                                    </td>
-                                                    <td>
-                                                        <div className="ott-badge">
-                                                            <span style={{ fontSize: '20px' }}>{getOTTIcon(item.ott)}</span>
-                                                            <span>{item.ott}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div className={`price-tag ${item.price === 0 ? 'free' : 'paid'}`}>
-                                                            {item.priceText.split('\n').map((line, lidx) => (
-                                                                <div key={lidx} style={lidx > 0 ? { fontSize: '11px', color: '#94a3b8', fontWeight: 400, marginTop: '2px' } : {}}>
-                                                                    {line}
-                                                                </div>
-                                                            ))}
+                                                    <td className="ott-price-cell">
+                                                        <div className="ott-price-list">
+                                                            {item.ottServices.map((svc, sidx) => {
+                                                                const hasWarning = svc.priceText.includes('광고') || svc.priceText.includes('제한');
+                                                                const finalPriceText = hasWarning ? '구독(무료)' : svc.priceText;
+                                                                const finalNote = svc.note || (hasWarning ? '광고형 제외' : null);
+
+                                                                return (
+                                                                    <div
+                                                                        key={sidx}
+                                                                        className="ott-price-row"
+                                                                        onClick={() => svc.link && window.open(svc.link, '_blank')}
+                                                                        style={{ cursor: svc.link ? 'pointer' : 'default' }}
+                                                                    >
+                                                                        <div className="ott-badge">
+                                                                            <span style={{ fontSize: '18px' }}>{getOTTIcon(svc.ott)}</span>
+                                                                            <span>{svc.ott}</span>
+                                                                        </div>
+                                                                        <div className={`price-tag ${svc.price === 0 ? 'free' : 'paid'}`}>
+                                                                            {finalPriceText}
+                                                                            {finalNote && <span className="price-note">{finalNote}</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </td>
                                                 </motion.tr>
@@ -394,7 +431,7 @@ function App() {
                                         ) : (
                                             !isSearching && (
                                                 <tr>
-                                                    <td colSpan="5" style={{ padding: '80px', textAlign: 'center', color: '#4b5563' }}>
+                                                    <td colSpan="3" style={{ padding: '80px', textAlign: 'center', color: '#4b5563' }}>
                                                         <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔎</div>
                                                         <div>"{searchTerm}"에 대한 검색 결과가 없습니다.</div>
                                                         <p style={{ marginTop: '12px', fontSize: '14px' }}>필터 설정을 확인하시거나, 보다 넓은 검색을 위해 API 키를 등록해주세요.</p>
