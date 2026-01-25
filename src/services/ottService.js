@@ -14,7 +14,9 @@ const RAPID_API_HOST = 'streaming-availability.p.rapidapi.com';
  */
 async function fetchByTmdbId(tmdbId, mediaType) {
     try {
-        const url = `https://${RAPID_API_HOST}/shows/${mediaType}/${tmdbId}?country=kr`;
+        // RapidAPI는 tv 대신 series를 사용함
+        const rapidType = mediaType === 'tv' ? 'series' : 'movie';
+        const url = `https://${RAPID_API_HOST}/shows/${rapidType}/${tmdbId}?country=kr`;
         const res = await fetch(url, {
             method: 'GET',
             headers: { 'X-RapidAPI-Key': RAPID_API_KEY, 'X-RapidAPI-Host': RAPID_API_HOST }
@@ -56,7 +58,7 @@ export const searchOTT = async (query) => {
         const itemsToProcess = [...searchData.results.slice(0, 16)];
         const processedCollectionIds = new Set();
 
-        // Collection Expansion
+        // 1. Collection Expansion (시리즈물 챙기기)
         for (const item of searchData.results.slice(0, 4)) {
             if (item.media_type === 'movie') {
                 try {
@@ -86,7 +88,7 @@ export const searchOTT = async (query) => {
             let kr = null;
             let deepData = null;
 
-            // A. TMDB Watch Providers (Base)
+            // Step A: TMDB 기본 정보 가져오기
             try {
                 const wpRes = await fetch(`${TMDB_BASE_URL}/${type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`);
                 const wpData = await wpRes.json();
@@ -101,7 +103,7 @@ export const searchOTT = async (query) => {
                                     texts: [cat === 'flatrate' ? '구독(무료)' : `개별구매`],
                                     prices: [cat === 'flatrate' ? 0 : 5000],
                                     type: cat,
-                                    link: `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`
+                                    link: null // 일단 비워둠 (실제 링크를 위해서)
                                 });
                             });
                         }
@@ -109,23 +111,21 @@ export const searchOTT = async (query) => {
                 }
             } catch (e) { }
 
-            // B. Premium API (Detailed Prices)
+            // Step B: Premium API로 실시간 가격 및 진짜 딥링크 가져오기
             deepData = await fetchByTmdbId(item.id, type);
             if (deepData && deepData.streamingOptions?.kr) {
                 deepData.streamingOptions.kr.forEach(opt => {
-                    const providerName = normalizeProvider(opt.service?.name || opt.service?.id);
+                    const pName = normalizeProvider(opt.service?.name || opt.service?.id);
                     let priceVal = opt.price ? parseInt(opt.price.amount) : (opt.type === 'subscription' ? 0 : 5000);
                     let priceText = opt.price
                         ? `${opt.type === 'buy' ? '소장 ' : '대여 '}${priceVal.toLocaleString()}원`
                         : (opt.type === 'subscription' ? '구독(무료)' : '개별구매');
 
-                    if (!providersMap.has(providerName)) {
-                        providersMap.set(providerName, { name: providerName, texts: [priceText], prices: [priceVal], type: opt.type, link: opt.link });
+                    if (!providersMap.has(pName)) {
+                        providersMap.set(pName, { name: pName, texts: [priceText], prices: [priceVal], type: opt.type, link: opt.link });
                     } else {
-                        const existing = providersMap.get(providerName);
-                        // 프리미엄 API의 실제 링크가 있으면 기존(구글 검색 등) 링크를 덮어씀
-                        if (opt.link) existing.link = opt.link;
-
+                        const existing = providersMap.get(pName);
+                        if (opt.link) existing.link = opt.link; // 진짜 링크 확보!
                         if (!existing.texts.includes(priceText)) {
                             existing.texts.push(priceText);
                             existing.prices.push(priceVal);
@@ -134,27 +134,32 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // C. Coupang Play - 무조건 노출 정책 (검색어와 유사하면 기본 제공)
-            if (!providersMap.has('Coupang Play')) {
-                // 서버 API 호출 시도 (가격 확인용)
-                try {
-                    const apiUrl = `/api/coupang-search?title=${encodeURIComponent(fullTitle)}`;
-                    const cpRes = await fetch(apiUrl, { signal: AbortSignal.timeout(5000) });
-                    const cpData = cpRes.ok ? await cpRes.json() : { exists: true, fallback: true };
+            // Step C: 쿠팡플레이 서버리스 크롤링 확인
+            try {
+                const apiUrl = `/api/coupang-search?title=${encodeURIComponent(fullTitle)}`;
+                const cpRes = await fetch(apiUrl, { signal: AbortSignal.timeout(6000) });
+                if (cpRes.ok) {
+                    const cpData = await cpRes.json();
+                    if (cpData.exists) { // 실제로 존재할 때만 추가!!
+                        const isFree = cpData.isFree || false;
+                        const priceText = cpData.priceText || (cpData.fallback ? '개별구매' : '개별구매');
+                        const priceVal = cpData.rawPrice || (isFree ? 0 : 5000);
 
-                    const isFree = cpData.isFree || false;
-                    const priceText = cpData.priceText || (cpData.fallback ? '개별구매' : '개별구매');
-                    const priceVal = cpData.rawPrice || (isFree ? 0 : 5000);
-
-                    providersMap.set('Coupang Play', {
-                        name: 'Coupang Play',
-                        texts: [priceText],
-                        prices: [priceVal],
-                        type: isFree ? 'subscription' : 'buy',
-                        link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
-                    });
-                } catch (e) {
-                    // 서버 API 실패해도 쿠팡플레이는 항상 목록에 추가
+                        providersMap.set('Coupang Play', {
+                            name: 'Coupang Play',
+                            texts: [priceText],
+                            prices: [priceVal],
+                            type: isFree ? 'subscription' : 'buy',
+                            link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
+                        });
+                    }
+                }
+            } catch (e) {
+                // 에러 시에는 TMDB에 쿠팡플레이 정보가 있는 경우에만 표시
+                const hasInTmdb = kr && ['flatrate', 'buy', 'rent'].some(cat =>
+                    kr[cat]?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play')
+                );
+                if (hasInTmdb) {
                     providersMap.set('Coupang Play', {
                         name: 'Coupang Play',
                         texts: ['개별구매'],
@@ -165,16 +170,16 @@ export const searchOTT = async (query) => {
                 }
             }
 
-            // Final consolidation (아이템별 수집 완료 후 맵에서 최종 결과 배열로 복사)
+            // 최종 병합 (Final consolidation)
             providersMap.forEach((info, pName) => {
                 const combinedText = info.texts.join(' / ');
                 const lowestPrice = Math.min(...info.prices);
 
-                // 고유 ID 생성 (pName이 한글인 경우 대비하여 encode)
-                const safeName = pName.replace(/\+/g, 'plus').replace(/\s+/g, '');
+                // 만약 끝까지 링크를 못 구했다면 어쩔 수 없이 구글 검색이라도...
+                const finalLink = info.link || `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`;
 
                 finalResults.push({
-                    id: `v8-${item.id}-${safeName}`,
+                    id: `v9-${item.id}-${pName.replace(/\s+/g, '')}`,
                     title: fullTitle,
                     ott: pName,
                     price: lowestPrice,
@@ -182,7 +187,7 @@ export const searchOTT = async (query) => {
                     image: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '',
                     description: item.overview ? item.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
                     release_date: item.release_date || item.first_air_date || '0000-00-00',
-                    link: info.link
+                    link: finalLink
                 });
             });
         }
