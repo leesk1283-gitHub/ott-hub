@@ -175,11 +175,13 @@ export const searchOTT = async (query) => {
                 const combinedText = info.texts.join(' / ');
                 const lowestPrice = Math.min(...info.prices);
 
-                // 만약 끝까지 링크를 못 구했다면 어쩔 수 없이 구글 검색이라도...
-                const finalLink = info.link || `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`;
+                // 링크 결정 순위: 1. Premium API 딥링크, 2. TMDB 공식 시청 페이지, 3. 최후의 수단 구글 검색
+                const finalLink = info.link ||
+                    (kr && kr.link) ||
+                    `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`;
 
                 finalResults.push({
-                    id: `v9-${item.id}-${pName.replace(/\s+/g, '')}`,
+                    id: `v10-${item.id}-${pName.replace(/\s+/g, '')}`,
                     title: fullTitle,
                     ott: pName,
                     price: lowestPrice,

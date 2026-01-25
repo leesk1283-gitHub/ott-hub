@@ -117,8 +117,12 @@ export default async function handler(req, res) {
             debugInfo.reason = 'No __NEXT_DATA__ script found in HTML';
         }
 
+        // 쿠팡플레이는 제목이 포함되어 있는지로 판단
+        // 검색 결과 페이지의 HTML 내에 영화 제목이 있으면 존재하는 것으로 판정
+        const contentExists = html.includes(title) || (jsonData && JSON.stringify(jsonData).includes(title));
+
         return res.status(200).json({
-            exists: true,
+            exists: contentExists,
             htmlLength: htmlLength,
             price: price,
             isFree: isFree,
@@ -133,7 +137,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
             error: 'Server error',
             message: error.message,
-            exists: true, // 에러 나도 링크는 보여주기
+            exists: false, // 에러 시에는 우선 없다고 함 (오표시 방지)
             fallback: true
         });
     }
