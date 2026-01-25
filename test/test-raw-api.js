@@ -2,7 +2,7 @@ const RAPID_API_KEY = 'fdd47c2553mshd19015530c43e2cp1a9d7djsn31c6ad035190';
 const RAPID_API_HOST = 'streaming-availability.p.rapidapi.com';
 
 async function testRawStreamingAvailability() {
-    const query = 'Home Alone 3';
+    const query = 'Interstellar';
     console.log(`Testing Streaming Availability API for: ${query}`);
 
     const url = `https://${RAPID_API_HOST}/shows/search/title?title=${encodeURIComponent(query)}&country=kr`;

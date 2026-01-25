@@ -127,28 +127,8 @@ export const searchOTT = async (query) => {
             }
         }
 
-        // 3. Initial Pricing API Title Search
+        // 3. (Optional) Removed title search as ID lookup is more precise for prices
         let pricingMap = new Map();
-        try {
-            const pricingUrl = `https://${RAPID_API_HOST}/shows/search/title?title=${encodeURIComponent(queryClean)}&country=kr`;
-            const pricingRes = await fetch(pricingUrl, {
-                method: 'GET',
-                headers: { 'X-RapidAPI-Key': RAPID_API_KEY, 'X-RapidAPI-Host': RAPID_API_HOST }
-            });
-            if (pricingRes.status === 200) {
-                const pricingData = await pricingRes.json();
-                const shows = Array.isArray(pricingData) ? pricingData : (pricingData.result || []);
-                shows.forEach(show => {
-                    const krOptions = show.streamingOptions?.kr;
-                    if (krOptions) {
-                        const tKey = (show.title || '').toLowerCase().replace(/\s/g, '');
-                        const oKey = (show.originalTitle || '').toLowerCase().replace(/\s/g, '');
-                        if (tKey) pricingMap.set(tKey, krOptions);
-                        if (oKey) pricingMap.set(oKey, krOptions);
-                    }
-                });
-            }
-        } catch (e) { }
 
         const finalResults = [];
         const priorityItems = itemsToProcess.slice(0, 15);
@@ -164,55 +144,55 @@ export const searchOTT = async (query) => {
                 continue;
             }
 
-            let providers = [];
+            let providersMap = new Map(); // providerName -> { text, price, type, link }
 
-            // A. Premium API
-            let premiumOptions = pricingMap.get(titleKey) || pricingMap.get(originalKey);
-            if (!premiumOptions) {
-                const deepData = await fetchByTmdbId(item.id, type);
-                if (deepData && deepData.streamingOptions?.kr) {
-                    premiumOptions = deepData.streamingOptions.kr;
-                }
-            }
-
-            if (premiumOptions) {
-                premiumOptions.forEach(opt => {
+            // A. Premium API (Primary source for actual prices)
+            const deepData = await fetchByTmdbId(item.id, type);
+            if (deepData && deepData.streamingOptions?.kr) {
+                deepData.streamingOptions.kr.forEach(opt => {
                     const providerName = normalizeProvider(opt.service?.name || opt.service?.id || '알 수 없음');
+                    let priceVal = opt.price ? parseInt(opt.price.amount) : 0;
                     let priceText = opt.price
-                        ? `${opt.price.amount.toLocaleString()}${opt.price.currency === 'KRW' ? '원' : opt.price.currency}(${opt.type === 'buy' ? '구매' : '대여'})`
+                        ? `${opt.type === 'buy' ? '구매 ' : '대여 '}${priceVal.toLocaleString()}원`
                         : (opt.type === 'subscription' ? '구독(무료)' : (opt.type === 'free' ? '무료' : '확인 필요'));
 
-                    providers.push({
-                        provider_name: providerName,
-                        text: priceText,
-                        price: opt.price ? opt.price.amount : 0,
-                        type: opt.type,
-                        link: opt.link
-                    });
+                    if (!providersMap.has(providerName)) {
+                        providersMap.set(providerName, {
+                            name: providerName,
+                            texts: [priceText],
+                            prices: [priceVal],
+                            type: opt.type,
+                            link: opt.link
+                        });
+                    } else {
+                        const existing = providersMap.get(providerName);
+                        if (!existing.texts.includes(priceText)) {
+                            existing.texts.push(priceText);
+                            existing.prices.push(priceVal);
+                        }
+                    }
                 });
             }
 
-            // B. TMDB Watch Providers
+            // B. TMDB Watch Providers (Fallback)
             try {
                 const wpRes = await fetch(`${TMDB_BASE_URL}/${type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`);
                 const wpData = await wpRes.json();
                 const kr = wpData.results?.KR;
                 if (kr) {
-                    const existingNames = new Set(providers.map(p => p.provider_name));
                     ['flatrate', 'buy', 'rent'].forEach(cat => {
                         if (kr[cat]) {
                             kr[cat].forEach(p => {
                                 const pName = normalizeProvider(p.provider_name);
-                                if (!existingNames.has(pName)) {
+                                if (!providersMap.has(pName)) {
                                     const directLink = getProviderSearchLink(pName, fullTitle);
-                                    providers.push({
-                                        provider_name: pName,
-                                        text: cat === 'flatrate' ? '구독(무료)' : `앱에서 확인(${cat === 'buy' ? '구매' : '대여'})`,
-                                        price: cat === 'flatrate' ? 0 : 99999,
+                                    providersMap.set(pName, {
+                                        name: pName,
+                                        texts: [cat === 'flatrate' ? '구독(무료)' : `앱에서 확인(${cat === 'buy' ? '구매' : '대여'})`],
+                                        prices: [cat === 'flatrate' ? 0 : 99999],
                                         type: cat,
                                         link: directLink || kr.link
                                     });
-                                    existingNames.add(pName);
                                 }
                             });
                         }
@@ -220,46 +200,45 @@ export const searchOTT = async (query) => {
                 }
             } catch (e) { }
 
-            // D. Manual Patches (Refined to only trusted data)
+            // D. Manual Patches
             if (KR_DATA_PATCHES[item.id]) {
-                const patchData = KR_DATA_PATCHES[item.id];
-                const patches = Array.isArray(patchData) ? patchData : (patchData.patches || (patchData.ott ? [patchData] : []));
-                const excludes = patchData.excludes || [];
-
-                providers = providers.filter(p => !excludes.includes(p.provider_name));
-                patches.forEach(patch => {
-                    const idx = providers.findIndex(p => p.provider_name === patch.ott);
-                    const obj = { provider_name: patch.ott, text: patch.text, price: patch.price || 0, type: patch.type || 'subscription', link: patch.link };
-                    if (idx !== -1) providers[idx] = obj;
-                    else providers.push(obj);
+                const patch = KR_DATA_PATCHES[item.id];
+                const pName = patch.ott;
+                providersMap.set(pName, {
+                    name: pName,
+                    texts: [patch.text],
+                    prices: [patch.price || 0],
+                    type: patch.type || 'subscription',
+                    link: patch.link
                 });
             }
 
-            providers.forEach(p => {
-                if (!finalResults.some(r => r.title === fullTitle && r.ott === p.provider_name)) {
-                    let priceText = p.text;
+            // Final consolidation and push
+            providersMap.forEach((info, pName) => {
+                // Combine texts like '대여 2,500원 / 구매 5,000원'
+                const combinedText = info.texts.join(' / ');
+                const lowestPrice = Math.min(...info.prices);
+
+                if (!finalResults.some(r => r.title === fullTitle && r.ott === pName)) {
+                    let priceText = combinedText;
                     let note = null;
 
-                    if (priceText && (
-                        priceText.includes('광고') ||
-                        priceText.includes('제한') ||
-                        priceText.includes('라이선스') ||
-                        priceText.length > 25
-                    )) {
+                    // Condition for Netflix ad-plan warning or other long info
+                    if (priceText.length > 35 && (priceText.includes('광고') || priceText.includes('제한') || priceText.includes('라이선스'))) {
                         note = '광고형 멤버십 제외';
                         priceText = '구독(무료)';
                     }
 
                     finalResults.push({
-                        id: `res-prec-${item.id}-${p.provider_name}`,
+                        id: `res-prec-${item.id}-${pName}`,
                         title: fullTitle,
-                        ott: p.provider_name,
-                        price: p.price,
+                        ott: pName,
+                        price: lowestPrice,
                         priceText: priceText,
                         image: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '',
                         description: item.overview ? item.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
                         release_date: item.release_date || item.first_air_date || '0000-00-00',
-                        link: p.link,
+                        link: info.link,
                         note: note
                     });
                 }
