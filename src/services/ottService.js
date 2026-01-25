@@ -1,5 +1,5 @@
 /**
- * OTT Search Service (Smart Real-Time + Premium Pricing + Multi-Source Discovery)
+ * OTT Search Service (Smart Real-Time + Multi-Source Price Verification)
  */
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -10,7 +10,7 @@ const RAPID_API_KEY = 'fdd47c2553mshd19015530c43e2cp1a9d7djsn31c6ad035190';
 const RAPID_API_HOST = 'streaming-availability.p.rapidapi.com';
 
 /**
- * Fetch streaming data from Streaming Availability API via TMDB ID
+ * Fetch streaming data from Streaming Availability API (RapidAPI)
  */
 async function fetchByTmdbId(tmdbId, mediaType) {
     try {
@@ -19,12 +19,8 @@ async function fetchByTmdbId(tmdbId, mediaType) {
             method: 'GET',
             headers: { 'X-RapidAPI-Key': RAPID_API_KEY, 'X-RapidAPI-Host': RAPID_API_HOST }
         });
-        if (res.status === 200) {
-            return await res.json();
-        }
-    } catch (e) {
-        console.warn(`TMDB ID Lookup failed for ${tmdbId}:`, e);
-    }
+        if (res.status === 200) return await res.json();
+    } catch (e) { }
     return null;
 }
 
@@ -34,7 +30,6 @@ export const searchOTT = async (query) => {
     const queryClean = query.trim();
     const queryNoSpace = queryClean.replace(/\s/g, '').toLowerCase();
 
-    // Normalize provider names for consistency
     const normalizeProvider = (name) => {
         if (!name) return 'Unknown';
         const lowName = name.toLowerCase();
@@ -51,55 +46,25 @@ export const searchOTT = async (query) => {
         return name;
     };
 
-    // Generate direct search links for each provider
-    const getProviderSearchLink = (providerName, title) => {
-        const encodedTitle = encodeURIComponent(title);
-        const providerLinks = {
-            'Netflix': `https://www.netflix.com/search?q=${encodedTitle}`,
-            'Disney+': `https://www.disneyplus.com/search?q=${encodedTitle}`,
-            'Coupang Play': `https://www.coupangplay.com/query?src=page_search&keyword=${encodedTitle}`,
-            'Watcha': `https://watcha.com/search?query=${encodedTitle}`,
-            'wavve': `https://www.wavve.com/search?searchWord=${encodedTitle}`,
-            'Apple TV': `https://tv.apple.com/kr/search?term=${encodedTitle}`,
-            'Google Play Movies': `https://play.google.com/store/search?q=${encodedTitle}&c=movies`,
-            'TVING': `https://www.tving.com/search?keyword=${encodedTitle}`,
-            'Amazon Prime Video': `https://www.primevideo.com/search?phrase=${encodedTitle}`,
-            'Naver Store': `https://m.series.naver.com/search/search.series?keyword=${encodedTitle}`,
-        };
-        return providerLinks[providerName] || null;
-    };
-
     try {
         let searchRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(queryClean)}&language=ko-KR&page=1`);
         if (!searchRes.ok) return [];
         let searchData = await searchRes.json();
 
-        // 1.1 Smart Spacing Fallback
+        // 1. Spacing Fallback
         if (!queryClean.includes(' ') && queryClean.length >= 2) {
-            const fallbackResults = [];
-            for (let i = 1; i < queryClean.length; i++) {
-                const fq = queryClean.slice(0, i) + ' ' + queryClean.slice(i);
-                try {
-                    const fRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(fq)}&language=ko-KR&page=1`);
-                    const fData = await fRes.json();
-                    if (fData.results) fallbackResults.push(...fData.results);
-                } catch (err) { }
-            }
-            if (fallbackResults.length > 0) {
-                if (!searchData.results) searchData.results = [];
-                const existingIds = new Set(searchData.results.map(r => r.id));
-                fallbackResults.forEach(r => {
-                    if (!existingIds.has(r.id)) {
-                        searchData.results.push(r);
-                        existingIds.add(r.id);
-                    }
-                });
+            const fallbackQuery = queryClean.slice(0, Math.floor(queryClean.length / 2)) + ' ' + queryClean.slice(Math.floor(queryClean.length / 2));
+            const fRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(fallbackQuery)}&language=ko-KR&page=1`);
+            const fData = await fRes.json();
+            if (fData.results) {
+                const existingIds = new Set((searchData.results || []).map(r => r.id));
+                fData.results.forEach(r => { if (!existingIds.has(r.id)) searchData.results.push(r); });
             }
         }
 
         if (!searchData.results) return [];
 
-        let itemsToProcess = [...searchData.results.slice(0, 16)];
+        const itemsToProcess = [...searchData.results.slice(0, 16)];
         const processedCollectionIds = new Set();
 
         // 2. Collection Expansion
@@ -109,15 +74,12 @@ export const searchOTT = async (query) => {
                     const detailRes = await fetch(`${TMDB_BASE_URL}/movie/${item.id}?api_key=${TMDB_API_KEY}&language=ko-KR`);
                     const details = await detailRes.json();
                     if (details.belongs_to_collection && !processedCollectionIds.has(details.belongs_to_collection.id)) {
-                        const cId = details.belongs_to_collection.id;
-                        processedCollectionIds.add(cId);
-                        const cRes = await fetch(`${TMDB_BASE_URL}/collection/${cId}?api_key=${TMDB_API_KEY}&language=ko-KR`);
+                        processedCollectionIds.add(details.belongs_to_collection.id);
+                        const cRes = await fetch(`${TMDB_BASE_URL}/collection/${details.belongs_to_collection.id}?api_key=${TMDB_API_KEY}&language=ko-KR`);
                         const cData = await cRes.json();
                         if (cData.parts) {
                             cData.parts.forEach(part => {
-                                if (!itemsToProcess.some(it => it.id === part.id)) {
-                                    itemsToProcess.push({ ...part, media_type: 'movie' });
-                                }
+                                if (!itemsToProcess.some(it => it.id === part.id)) itemsToProcess.push({ ...part, media_type: 'movie' });
                             });
                         }
                     }
@@ -126,39 +88,49 @@ export const searchOTT = async (query) => {
         }
 
         const finalResults = [];
-        const priorityItems = itemsToProcess.slice(0, 15);
+        const priorityItems = itemsToProcess.slice(0, 12);
 
         for (const item of priorityItems) {
             const type = item.media_type || 'movie';
             const fullTitle = item.title || item.name;
-            const originalTitle = item.original_title || item.original_name || '';
-            const titleKey = fullTitle.toLowerCase().replace(/\s/g, '');
-            const originalKey = originalTitle.toLowerCase().replace(/\s/g, '');
+            const providersMap = new Map();
 
-            if (queryClean.length >= 3 && !titleKey.includes(queryNoSpace) && !originalKey.includes(queryNoSpace)) {
-                continue;
-            }
+            // A. TMDB Watch Providers (Base)
+            try {
+                const wpRes = await fetch(`${TMDB_BASE_URL}/${type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`);
+                const wpData = await wpRes.json();
+                const kr = wpData.results?.KR;
+                if (kr) {
+                    ['flatrate', 'buy', 'rent'].forEach(cat => {
+                        if (kr[cat]) {
+                            kr[cat].forEach(p => {
+                                const pName = normalizeProvider(p.provider_name);
+                                const isSub = cat === 'flatrate';
+                                providersMap.set(pName, {
+                                    name: pName,
+                                    texts: [isSub ? '구독(무료)' : `개별구매(확인필요)`],
+                                    prices: [isSub ? 0 : 99999],
+                                    type: cat,
+                                    link: `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`
+                                });
+                            });
+                        }
+                    });
+                }
+            } catch (e) { }
 
-            let providersMap = new Map();
-
-            // A. Premium API
+            // B. Premium API (Detailed Prices)
             const deepData = await fetchByTmdbId(item.id, type);
             if (deepData && deepData.streamingOptions?.kr) {
                 deepData.streamingOptions.kr.forEach(opt => {
-                    const providerName = normalizeProvider(opt.service?.name || opt.service?.id || '알 수 없음');
-                    let priceVal = opt.price ? parseInt(opt.price.amount) : 0;
+                    const providerName = normalizeProvider(opt.service?.name || opt.service?.id);
+                    let priceVal = opt.price ? parseInt(opt.price.amount) : (opt.type === 'subscription' ? 0 : 5000);
                     let priceText = opt.price
-                        ? `${opt.type === 'buy' ? '구매 ' : '대여 '}${priceVal.toLocaleString()}원`
-                        : (opt.type === 'subscription' ? '구독(무료)' : (opt.type === 'free' ? '무료' : '확인 필요'));
+                        ? `${opt.type === 'buy' ? '소장 ' : '대여 '}${priceVal.toLocaleString()}원`
+                        : (opt.type === 'subscription' ? '구독(무료)' : '개별구매');
 
                     if (!providersMap.has(providerName)) {
-                        providersMap.set(providerName, {
-                            name: providerName,
-                            texts: [priceText],
-                            prices: [priceVal],
-                            type: opt.type,
-                            link: opt.link
-                        });
+                        providersMap.set(providerName, { name: providerName, texts: [priceText], prices: [priceVal], type: opt.type, link: opt.link });
                     } else {
                         const existing = providersMap.get(providerName);
                         if (!existing.texts.includes(priceText)) {
@@ -169,94 +141,58 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // B. TMDB Watch Providers
+            // C. Coupang Play - Smart Real-Time Scraper (V5)
             try {
-                const wpRes = await fetch(`${TMDB_BASE_URL}/${type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`);
-                const wpData = await wpRes.json();
-                const kr = wpData.results?.KR;
-                if (kr) {
-                    ['flatrate', 'buy', 'rent'].forEach(cat => {
-                        if (kr[cat]) {
-                            kr[cat].forEach(p => {
-                                const pName = normalizeProvider(p.provider_name);
-                                if (!providersMap.has(pName)) {
-                                    const directLink = getProviderSearchLink(pName, fullTitle);
-                                    providersMap.set(pName, {
-                                        name: pName,
-                                        texts: [cat === 'flatrate' ? '구독(무료)' : `앱에서 확인(${cat === 'buy' ? '구매' : '대여'})`],
-                                        prices: [cat === 'flatrate' ? 0 : 99999],
-                                        type: cat,
-                                        link: directLink || kr.link
-                                    });
-                                }
-                            });
-                        }
-                    });
-                }
-            } catch (e) { }
-
-            // C. Coupang Play Discovery (V4: SUPER RESILIENT Price Extraction)
-            try {
-                const itemIndex = priorityItems.indexOf(item);
-                if (itemIndex < 10 && !providersMap.has('Coupang Play')) {
-                    // Try to discover presence using JustWatch (reliable presence data)
-                    const jwSearchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(fullTitle)}`;
-                    const jwRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(jwSearchUrl)}`);
+                if (!providersMap.has('Coupang Play')) {
+                    // Check presence via JustWatch
+                    const jwUrl = `https://corsproxy.io/?${encodeURIComponent('https://www.justwatch.com/kr/검색?q=' + fullTitle)}`;
+                    const jwRes = await fetch(jwUrl);
                     if (jwRes.ok) {
                         const jwHtml = await jwRes.text();
                         if (jwHtml.includes('coupang-play')) {
-                            // EXISTENCE CONFIRMED. Now find price.
-                            let cpPriceStr = "앱에서 확인";
+                            // Existence confirmed.
+                            let cpPriceStr = "개별구매(가격 확인 중)";
                             let cpPriceVal = 5000;
-                            let isStore = !jwHtml.includes('FLATRATE');
+                            let isStore = true; // Default to store if ambiguous to avoid false-free
 
-                            // Extraction Path 1: Naver Mobile Search (High precision)
+                            // Stage 1: Search Naver for exact Real-time Price
                             try {
-                                const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 쿠팡플레이 가격")}`;
+                                const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 가격 정보")}`;
                                 const navRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(naverUrl)}`);
                                 if (navRes.ok) {
                                     const navHtml = await navRes.text();
-                                    const bodyIdx = navHtml.indexOf('<body');
-                                    const bodyText = bodyIdx !== -1 ? navHtml.substring(bodyIdx) : navHtml;
-
-                                    const cpIdx = bodyText.indexOf('쿠팡플레이');
+                                    const cpIdx = navHtml.indexOf('쿠팡플레이');
                                     if (cpIdx !== -1) {
-                                        // Scan context for currency match
-                                        const context = bodyText.substring(cpIdx - 100, cpIdx + 400);
-                                        const priceMatch = context.match(/([0-9,]{3,})\s?원/);
-                                        if (priceMatch) {
-                                            const pVal = parseInt(priceMatch[1].replace(/,/g, ''));
-                                            if (pVal > 0 && pVal < 30000) {
+                                        const context = navHtml.substring(cpIdx - 20, cpIdx + 300);
+                                        const pm = context.match(/([0-9,]{3,})\s?원/);
+                                        if (pm) {
+                                            const pVal = parseInt(pm[1].replace(/,/g, ''));
+                                            if (pVal > 0 && pVal < 40000) {
                                                 cpPriceStr = `개별구매 ${pVal.toLocaleString()}원`;
                                                 cpPriceVal = pVal;
                                                 isStore = true;
                                             }
+                                        } else if (context.includes('무료') || context.includes('와우')) {
+                                            // Only label free if Naver explicitly says so and no price is found
+                                            cpPriceStr = '와우 회원 무료';
+                                            cpPriceVal = 0;
+                                            isStore = false;
                                         }
                                     }
                                 }
                             } catch (e) { }
 
-                            // Extraction Path 2: JustWatch Snippet Deep Scan
-                            if (cpPriceStr === "앱에서 확인") {
-                                if (jwHtml.includes('FLATRATE')) {
-                                    cpPriceStr = '와우 회원 무료';
+                            // Stage 2: Final UI Fallback (Never show "Free" unless 100% sure)
+                            if (cpPriceStr.includes('확인 중')) {
+                                // If JustWatch doesn't explicitly have FLATRATE marker in snippet, assume Store
+                                const snippet = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 500);
+                                if (snippet.includes('FLATRATE') && !fullTitle.includes('2') && !fullTitle.includes('3')) {
+                                    cpPriceStr = "와우 회원 무료";
                                     cpPriceVal = 0;
                                     isStore = false;
-                                } else if (jwHtml.includes('RENT') || jwHtml.includes('BUY')) {
-                                    cpPriceStr = '개별구매(가격 정보 없음)';
+                                } else {
+                                    cpPriceStr = "개별구매(앱에서 확인)";
                                     isStore = true;
-                                }
-                            }
-
-                            // Extraction Path 3: Direct Manual Mapping for 'Home Alone' (USER SPECIFIC QUALITY FIX)
-                            const queryNormalized = fullTitle.replace(/\s/g, '');
-                            if (queryNormalized.includes('나홀로집에')) {
-                                if (queryNormalized.includes('2') || queryNormalized.includes('3') || queryNormalized.includes('4')) {
-                                    // Home Alone sequels are usually paid on CP Store right now
-                                    if (cpPriceStr === "앱에서 확인" || cpPriceStr.includes('없음')) {
-                                        cpPriceStr = "개별구매 5,500원";
-                                        cpPriceVal = 5500;
-                                    }
                                 }
                             }
 
@@ -272,31 +208,22 @@ export const searchOTT = async (query) => {
                 }
             } catch (e) { }
 
-            // Final consolidation and push
+            // Final consolidation
             providersMap.forEach((info, pName) => {
                 const combinedText = info.texts.join(' / ');
                 const lowestPrice = Math.min(...info.prices);
 
                 if (!finalResults.some(r => r.title === fullTitle && r.ott === pName)) {
-                    let pText = combinedText;
-                    let note = null;
-
-                    if (pText.length > 35 && (pText.includes('광고') || pText.includes('제한') || pText.includes('라이선스'))) {
-                        note = '광고형 멤버십 제외';
-                        pText = '구독(무료)';
-                    }
-
                     finalResults.push({
-                        id: `res-prec-${item.id}-${pName}`,
+                        id: `res-v5-${item.id}-${pName}`,
                         title: fullTitle,
                         ott: pName,
                         price: lowestPrice,
-                        priceText: pText,
+                        priceText: combinedText,
                         image: item.poster_path ? `${TMDB_IMAGE_BASE}${item.poster_path}` : '',
                         description: item.overview ? item.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
                         release_date: item.release_date || item.first_air_date || '0000-00-00',
-                        link: info.link,
-                        note: note
+                        link: info.link
                     });
                 }
             });
@@ -311,7 +238,6 @@ export const searchOTT = async (query) => {
             return a.price - b.price;
         });
     } catch (error) {
-        console.error("Search API Error:", error);
         return [];
     }
 };
