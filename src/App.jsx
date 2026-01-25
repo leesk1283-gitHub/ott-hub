@@ -106,7 +106,12 @@ function App() {
                 link: item.link
             });
         });
-        return Array.from(titleMap.values());
+        return Array.from(titleMap.values()).sort((a, b) => {
+            // 개봉일 오름차순 정렬 (옛날 영화가 먼저 -> 시리즈 순서)
+            if (!a.release_date) return 1;
+            if (!b.release_date) return -1;
+            return new Date(a.release_date) - new Date(b.release_date);
+        });
     }
 
     const addToRecent = (term) => {
@@ -346,14 +351,6 @@ function App() {
 
                             <div className="table-container">
                                 <table className="ott-table">
-                                    {filteredResults.length > 0 && (
-                                        <thead>
-                                            <tr>
-                                                <th className="th-content" style={{ textAlign: 'center' }}><span>컨텐츠</span></th>
-                                                <th className="th-price" style={{ textAlign: 'center' }}><span>OTT 가격</span></th>
-                                            </tr>
-                                        </thead>
-                                    )}
                                     <tbody>
                                         {filteredResults.length > 0 ? (
                                             filteredResults.map((item, index) => (
