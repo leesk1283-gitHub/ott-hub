@@ -79,14 +79,53 @@ export default async function handler(req, res) {
             }
         }
 
+        // JSON 데이터 추출 시도 (__NEXT_DATA__)
+        let debugInfo = { foundNextData: false, dataLength: 0, reason: '' };
+        const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/);
+
+        if (nextDataMatch && nextDataMatch[1]) {
+            debugInfo.foundNextData = true;
+            debugInfo.dataLength = nextDataMatch[1].length;
+
+            try {
+                const jsonData = JSON.parse(nextDataMatch[1]);
+                const jsonStr = JSON.stringify(jsonData);
+
+                // 가격 관련 키워드 검색
+                // 쿠팡플레이 데이터 구조 추정: "price", "productPrice", "originalPrice" 등
+                const priceMatch = jsonStr.match(/"price":\s*([0-9]+)/) ||
+                    jsonStr.match(/"amount":\s*([0-9]+)/);
+
+                if (priceMatch) {
+                    price = parseInt(priceMatch[1]);
+                    debugInfo.priceFoundInJson = true;
+                }
+
+                // 무료 관련 키워드 검색
+                if (jsonStr.includes('"isFree":true') || jsonStr.includes('FLATRATE') || jsonStr.includes('WowOnly')) {
+                    isFree = true;
+                    debugInfo.isFreeFoundInJson = true;
+                }
+
+                // 디버깅을 위해 JSON 일부 포함 (너무 길면 자름)
+                debugInfo.snippet = jsonStr.substring(0, 500);
+
+            } catch (e) {
+                debugInfo.error = e.message;
+            }
+        } else {
+            debugInfo.reason = 'No __NEXT_DATA__ script found in HTML';
+        }
+
         return res.status(200).json({
-            exists: true,
-            htmlLength: htmlLength, // 디버깅 정보
+            exists: true, // 무조건 true (CSR 대응)
+            htmlLength: htmlLength,
             price: price,
             isFree: isFree,
             priceText: priceText || (price ? `${price.toLocaleString()}원` : (isFree ? '와우 회원 무료' : '개별구매(앱에서 확인)')),
             rawPrice: price,
-            fallback: false
+            fallback: false,
+            debug: debugInfo // 디버그 정보 추가
         });
 
     } catch (error) {
