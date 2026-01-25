@@ -127,9 +127,6 @@ export const searchOTT = async (query) => {
             }
         }
 
-        // 3. (Optional) Removed title search as ID lookup is more precise for prices
-        let pricingMap = new Map();
-
         const finalResults = [];
         const priorityItems = itemsToProcess.slice(0, 15);
 
@@ -144,9 +141,9 @@ export const searchOTT = async (query) => {
                 continue;
             }
 
-            let providersMap = new Map(); // providerName -> { text, price, type, link }
+            let providersMap = new Map();
 
-            // A. Premium API (Primary source for actual prices)
+            // A. Premium API
             const deepData = await fetchByTmdbId(item.id, type);
             if (deepData && deepData.streamingOptions?.kr) {
                 deepData.streamingOptions.kr.forEach(opt => {
@@ -174,7 +171,7 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // B. TMDB Watch Providers (Fallback)
+            // B. TMDB Watch Providers
             try {
                 const wpRes = await fetch(`${TMDB_BASE_URL}/${type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`);
                 const wpData = await wpRes.json();
@@ -200,24 +197,43 @@ export const searchOTT = async (query) => {
                 }
             } catch (e) { }
 
-            // D. Manual Patches (Array-ready)
-            if (KR_DATA_PATCHES[item.id]) {
-                const patches = KR_DATA_PATCHES[item.id];
-                patches.forEach(patch => {
-                    const pName = patch.ott;
-                    providersMap.set(pName, {
-                        name: pName,
-                        texts: [patch.text],
-                        prices: [patch.price || 0],
-                        type: patch.type || 'subscription',
-                        link: patch.link
-                    });
-                });
-            }
+            // C. Coupang Play Discovery for THIS specific item
+            try {
+                // We only do this for the top 4 results to stay fast
+                if (priorityItems.indexOf(item) < 4 && !providersMap.has('Coupang Play')) {
+                    const jwSearchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(fullTitle)}`;
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(jwSearchUrl)}`;
+                    const cpRes = await fetch(proxyUrl);
+                    if (cpRes.ok) {
+                        const html = await cpRes.text();
+                        if (html.includes('coupang-play')) {
+                            const cpIdx = html.indexOf('coupang-play');
+                            const snippet = html.substring(cpIdx, cpIdx + 1200);
+
+                            // Highly improved price detection
+                            const priceMatch = snippet.match(/₩\s?([0-9,]+)/) || snippet.match(/([0-9,]+)원/);
+                            let cpPriceStr = snippet.includes('FLATRATE') ? '와우 회원 무료' : '앱에서 확인';
+
+                            if (priceMatch) {
+                                cpPriceStr = `대여/구매 ${priceMatch[1]}원`;
+                            } else if (snippet.includes('BUY') || snippet.includes('RENT')) {
+                                cpPriceStr = '와우 회원 전용(구매)';
+                            }
+
+                            providersMap.set('Coupang Play', {
+                                name: 'Coupang Play',
+                                texts: [cpPriceStr],
+                                prices: [snippet.includes('FLATRATE') ? 0 : 5000],
+                                type: snippet.includes('FLATRATE') ? 'subscription' : 'buy',
+                                link: `https://www.coupangplay.com/search?keyword=${encodeURIComponent(fullTitle)}`
+                            });
+                        }
+                    }
+                }
+            } catch (e) { }
 
             // Final consolidation and push
             providersMap.forEach((info, pName) => {
-                // Combine texts like '대여 2,500원 / 구매 5,000원'
                 const combinedText = info.texts.join(' / ');
                 const lowestPrice = Math.min(...info.prices);
 
@@ -225,7 +241,6 @@ export const searchOTT = async (query) => {
                     let priceText = combinedText;
                     let note = null;
 
-                    // Condition for Netflix ad-plan warning or other long info
                     if (priceText.length > 35 && (priceText.includes('광고') || priceText.includes('제한') || priceText.includes('라이선스'))) {
                         note = '광고형 멤버십 제외';
                         priceText = '구독(무료)';
@@ -247,53 +262,14 @@ export const searchOTT = async (query) => {
             });
         }
 
-        // ADDED: Search Coupang Play via JustWatch detection (Highly reliable)
-        try {
-            const jwSearchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(queryClean)}`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(jwSearchUrl)}`;
-            const cpRes = await fetch(proxyUrl);
-
-            if (cpRes.ok) {
-                const html = await cpRes.text();
-                // Check for Coupang Play markers in JustWatch results
-                if (html.includes('coupang-play')) {
-                    const firstItem = itemsToProcess[0];
-                    if (firstItem) {
-                        // Determine if it's 'Flatrate' (membership free) or 'Buy/Rent' (store)
-                        // Search for the snippet near 'coupang-play'
-                        const cpIdx = html.indexOf('coupang-play');
-                        const snippet = html.substring(cpIdx, cpIdx + 300);
-                        const isFlatrate = snippet.includes('FLATRATE');
-                        const isBuyRent = snippet.includes('BUY') || snippet.includes('RENT');
-
-                        finalResults.push({
-                            id: `res-cp-${firstItem.id}`,
-                            title: firstItem.title || firstItem.name,
-                            ott: 'Coupang Play',
-                            price: 0,
-                            priceText: isFlatrate ? '와우 회원 무료' : (isBuyRent ? '와우 회원 전용(구매)' : '앱에서 확인'),
-                            image: firstItem.poster_path ? `${TMDB_IMAGE_BASE}${firstItem.poster_path}` : '',
-                            description: firstItem.overview ? firstItem.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
-                            release_date: firstItem.release_date || firstItem.first_air_date || '0000-00-00',
-                            link: `https://www.coupangplay.com/search?keyword=${encodeURIComponent(queryClean)}`,
-                            note: null
-                        });
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn("Coupang Play discovery failed:", e);
-        }
-
-        return finalResults
-            .sort((a, b) => {
-                const aMatch = a.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
-                const bMatch = b.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
-                if (aMatch && !bMatch) return -1;
-                if (!aMatch && bMatch) return 1;
-                if (a.release_date !== b.release_date) return b.release_date.localeCompare(a.release_date);
-                return a.price - b.price;
-            });
+        return finalResults.sort((a, b) => {
+            const aMatch = a.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
+            const bMatch = b.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
+            if (aMatch && !bMatch) return -1;
+            if (!aMatch && bMatch) return 1;
+            if (a.release_date !== b.release_date) return b.release_date.localeCompare(a.release_date);
+            return a.price - b.price;
+        });
     } catch (error) {
         console.error("Search API Error:", error);
         return [];
