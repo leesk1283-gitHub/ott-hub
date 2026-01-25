@@ -148,8 +148,11 @@ export const searchOTT = async (query) => {
                                 const cpRes = await fetch(cpSearchProxy);
                                 if (cpRes.ok) {
                                     const cpHtml = await cpRes.text();
-                                    // 검색 결과에 영화 제목이 있으면 실제로 존재
-                                    actuallyExists = cpHtml.length > 10000 && cpHtml.includes(fullTitle);
+                                    // 검색 결과에 제목의 핵심 단어가 포함되어 있으면 존재
+                                    // 예: "나 홀로 집에 2: 뉴욕을 헤매다" 같은 부제목 있는 경우 대응
+                                    const titleWords = fullTitle.split(' ').filter(w => w.length > 1);
+                                    const hasAllWords = titleWords.every(word => cpHtml.includes(word));
+                                    actuallyExists = cpHtml.length > 10000 && hasAllWords;
                                 }
                             } catch (e) {
                                 // 쿠팡 검색 실패 시 JustWatch 믿기
@@ -163,7 +166,7 @@ export const searchOTT = async (query) => {
 
                                 providersMap.set('Coupang Play', {
                                     name: 'Coupang Play',
-                                    texts: [isFree ? '와우 회원 무료' : '개별구매(앱에서 가격 확인)'],
+                                    texts: [isFree ? '와우 회원 무료' : '개별구매'],
                                     prices: [isFree ? 0 : 5000],
                                     type: isFree ? 'subscription' : 'buy',
                                     link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
