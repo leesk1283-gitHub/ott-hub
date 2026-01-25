@@ -101,7 +101,7 @@ export const searchOTT = async (query) => {
                                     texts: [cat === 'flatrate' ? '구독(무료)' : `개별구매`],
                                     prices: [cat === 'flatrate' ? 0 : 5000],
                                     type: cat,
-                                    link: kr.link || `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`
+                                    link: `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`
                                 });
                             });
                         }
