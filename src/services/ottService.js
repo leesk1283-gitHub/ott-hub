@@ -247,8 +247,38 @@ export const searchOTT = async (query) => {
             });
         }
 
+        // ADDED: Search Coupang Play via lightweight request (CORS Proxy used for browser environment)
+        try {
+            const cpSearchUrl = `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(queryClean)}`;
+            const cpRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(cpSearchUrl)}`);
+            if (cpRes.ok) {
+                const cpInfo = await cpRes.json();
+                const html = cpInfo.contents || '';
+                // Check if title appears in search results or page content
+                if (html.includes(queryClean) || html.includes(itemsToProcess[0]?.title)) {
+                    const isStore = html.includes('스토어') || html.includes('구매');
+                    const firstItem = itemsToProcess[0];
+                    if (firstItem) {
+                        finalResults.push({
+                            id: `res-cp-${firstItem.id}`,
+                            title: firstItem.title || firstItem.name,
+                            ott: 'Coupang Play',
+                            price: 0,
+                            priceText: isStore ? '와우 회원 전용(구매)' : '와우 회원 무료',
+                            image: firstItem.poster_path ? `${TMDB_IMAGE_BASE}${firstItem.poster_path}` : '',
+                            description: firstItem.overview ? firstItem.overview.slice(0, 100) + '...' : '내용 설명이 없습니다.',
+                            release_date: firstItem.release_date || firstItem.first_air_date || '0000-00-00',
+                            link: cpSearchUrl,
+                            note: null
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Coupang Play search failed:", e);
+        }
+
         return finalResults
-            .filter(r => r.ott !== 'Coupang Play')
             .sort((a, b) => {
                 const aMatch = a.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;
                 const bMatch = b.title.replace(/\s/g, '').toLowerCase() === queryNoSpace;

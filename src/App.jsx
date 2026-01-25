@@ -12,7 +12,8 @@ const ALL_OTT_LIST = [
     { id: 'Apple TV', name: '애플 TV' },
     { id: 'YouTube', name: '유튜브' },
     { id: 'Google Play', name: '구글 플레이' },
-    { id: 'Naver SeriesOn', name: '네이버 시리즈온' }
+    { id: 'Naver SeriesOn', name: '네이버 시리즈온' },
+    { id: 'Coupang Play', name: '쿠팡플레이' }
 ]
 
 function App() {
