@@ -10,8 +10,9 @@ const ALL_OTT_LIST = [
     { id: 'Wavve', name: '웨이브' },
     { id: 'Watcha', name: '왓챠' },
     { id: 'Apple TV', name: '애플 TV' },
-    { id: 'Naver SeriesOn', name: '네이버 시리즈온' },
-    { id: 'Google Play Movies', name: '구글 플레이' }
+    { id: 'YouTube', name: '유튜브' },
+    { id: 'Google Play', name: '구글 플레이' },
+    { id: 'Naver SeriesOn', name: '네이버 시리즈온' }
 ]
 
 function App() {
@@ -401,7 +402,7 @@ function App() {
                                                                 const hasWarning = svc.priceText.includes('광고') ||
                                                                     svc.priceText.includes('제한') ||
                                                                     svc.priceText.includes('라이선스') ||
-                                                                    svc.priceText.length > 25;
+                                                                    svc.priceText.length > 35;
                                                                 const finalPriceText = hasWarning ? '구독(무료)' : svc.priceText;
                                                                 const finalNote = svc.note || (hasWarning ? '광고형 멤버십 제외' : null);
 

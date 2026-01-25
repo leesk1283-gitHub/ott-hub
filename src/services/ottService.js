@@ -63,6 +63,9 @@ export const searchOTT = async (query) => {
         if (lowName.includes('watcha')) return 'Watcha';
         if (lowName.includes('tving')) return 'TVING';
         if (lowName.includes('apple')) return 'Apple TV';
+        if (lowName.includes('google')) return 'Google Play';
+        if (lowName.includes('youtube')) return 'YouTube';
+        if (lowName.includes('naver')) return 'Naver SeriesOn';
         if (lowName.includes('coupang')) return 'Coupang Play';
         return name;
     };
@@ -286,6 +289,7 @@ export const getOTTIcon = (ottName) => {
     if (name.includes('coupang')) return '🚀';
     if (name.includes('apple')) return '🍎';
     if (name.includes('google')) return '🎯';
+    if (name.includes('youtube')) return '🎬';
     if (name.includes('naver')) return '🟢';
     return '📺';
 };
