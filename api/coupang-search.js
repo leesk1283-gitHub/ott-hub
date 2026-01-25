@@ -118,22 +118,23 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json({
-            exists: true, // 무조건 true (CSR 대응)
+            exists: true,
             htmlLength: htmlLength,
             price: price,
             isFree: isFree,
             priceText: priceText || (price ? `${price.toLocaleString()}원` : (isFree ? '와우 회원 무료' : '개별구매(앱에서 확인)')),
             rawPrice: price,
             fallback: false,
-            debug: debugInfo // 디버그 정보 추가
+            debug: debugInfo
         });
 
     } catch (error) {
         console.error('Coupang search error:', error);
-        return res.status(500).json({
+        return res.status(200).json({
             error: 'Server error',
             message: error.message,
-            exists: false
+            exists: true, // 에러 나도 링크는 보여주기
+            fallback: true
         });
     }
 }
