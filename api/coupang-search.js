@@ -42,8 +42,17 @@ export default async function handler(req, res) {
         const html = await response.text();
 
         // 검색 결과 분석
+        // 1. 띄어쓰기 무시하고 단순 포함 여부 확인 (가장 확실)
+        const normalizedTitle = title.replace(/\s+/g, '');
+        const normalizedHtml = html.replace(/\s+/g, '');
+
+        // 2. 제목 단어별 포함 여부 (띄어쓰기 있는 경우)
         const titleWords = title.split(' ').filter(w => w.length > 1);
-        const exists = html.length > 5000 && titleWords.every(word => html.includes(word));
+
+        const exists = html.length > 5000 && (
+            normalizedHtml.includes(normalizedTitle) ||
+            titleWords.every(word => html.includes(word))
+        );
 
         if (!exists) {
             return res.status(200).json({
