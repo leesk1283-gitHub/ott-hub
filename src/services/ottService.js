@@ -130,8 +130,7 @@ export const searchOTT = async (query) => {
             }
 
             // C. Coupang Play - A안: 간소화된 존재 감지 (Simplified Presence Detection)
-            // 상세 페이지는 로그인 필요 → 정확한 가격 추출 불가
-            // JustWatch 우선 + Premium API/TMDB 교차 검증으로 오탐지 방지
+            // JustWatch에서 찾으면 쿠팡플레이 검색 페이지에서 실제 존재 여부 확인
             try {
                 if (!providersMap.has('Coupang Play')) {
                     // Step 1: JustWatch에서 쿠팡플레이 확인
@@ -141,16 +140,23 @@ export const searchOTT = async (query) => {
                         const jwHtml = await jwRes.text();
                         if (jwHtml.includes('coupang-play')) {
 
-                            // Step 2: 교차 검증 - Premium API나 TMDB에도 있는지 확인
-                            const hasInPremiumApi = deepData?.streamingOptions?.kr?.some(opt =>
-                                normalizeProvider(opt.service?.name || opt.service?.id) === 'Coupang Play'
-                            );
-                            const hasInTmdb = kr && ['flatrate', 'buy', 'rent'].some(cat =>
-                                kr[cat]?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play')
-                            );
+                            // Step 2: 쿠팡플레이 검색 페이지에서 실제 존재 여부 확인
+                            let actuallyExists = false;
+                            try {
+                                const cpSearchUrl = `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`;
+                                const cpSearchProxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(cpSearchUrl)}`;
+                                const cpRes = await fetch(cpSearchProxy);
+                                if (cpRes.ok) {
+                                    const cpHtml = await cpRes.text();
+                                    // 검색 결과에 영화 제목이 있으면 실제로 존재
+                                    actuallyExists = cpHtml.length > 10000 && cpHtml.includes(fullTitle);
+                                }
+                            } catch (e) {
+                                // 쿠팡 검색 실패 시 JustWatch 믿기
+                                actuallyExists = true;
+                            }
 
-                            // Premium API나 TMDB 중 하나라도 있으면 표시 (오탐지 아님)
-                            if (hasInPremiumApi || hasInTmdb) {
+                            if (actuallyExists) {
                                 // JustWatch FLATRATE 마커만으로 무료/유료 판별
                                 const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
                                 const isFree = cpSnip.includes('FLATRATE');
