@@ -1,5 +1,5 @@
 /**
- * OTT Search Service (Smart Real-Time + Multi-Source Price Verification)
+ * OTT Search Service (Smart Real-Time + Adaptive Scraping Engine V6)
  */
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -51,23 +51,12 @@ export const searchOTT = async (query) => {
         if (!searchRes.ok) return [];
         let searchData = await searchRes.json();
 
-        // 1. Spacing Fallback
-        if (!queryClean.includes(' ') && queryClean.length >= 2) {
-            const fallbackQuery = queryClean.slice(0, Math.floor(queryClean.length / 2)) + ' ' + queryClean.slice(Math.floor(queryClean.length / 2));
-            const fRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(fallbackQuery)}&language=ko-KR&page=1`);
-            const fData = await fRes.json();
-            if (fData.results) {
-                const existingIds = new Set((searchData.results || []).map(r => r.id));
-                fData.results.forEach(r => { if (!existingIds.has(r.id)) searchData.results.push(r); });
-            }
-        }
-
         if (!searchData.results) return [];
 
         const itemsToProcess = [...searchData.results.slice(0, 16)];
         const processedCollectionIds = new Set();
 
-        // 2. Collection Expansion
+        // Collection Expansion
         for (const item of searchData.results.slice(0, 4)) {
             if (item.media_type === 'movie') {
                 try {
@@ -105,11 +94,10 @@ export const searchOTT = async (query) => {
                         if (kr[cat]) {
                             kr[cat].forEach(p => {
                                 const pName = normalizeProvider(p.provider_name);
-                                const isSub = cat === 'flatrate';
                                 providersMap.set(pName, {
                                     name: pName,
-                                    texts: [isSub ? '구독(무료)' : `개별구매(확인필요)`],
-                                    prices: [isSub ? 0 : 99999],
+                                    texts: [cat === 'flatrate' ? '구독(무료)' : `개별구매`],
+                                    prices: [cat === 'flatrate' ? 0 : 5000],
                                     type: cat,
                                     link: `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`
                                 });
@@ -141,57 +129,62 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // C. Coupang Play - Smart Real-Time Scraper (V5)
+            // C. Coupang Play - Hyper-Aggressive Real-Time Engine (V6)
             try {
                 if (!providersMap.has('Coupang Play')) {
-                    // Check presence via JustWatch
+                    // Stage 1: Fast existence check (JustWatch)
                     const jwUrl = `https://corsproxy.io/?${encodeURIComponent('https://www.justwatch.com/kr/검색?q=' + fullTitle)}`;
                     const jwRes = await fetch(jwUrl);
                     if (jwRes.ok) {
                         const jwHtml = await jwRes.text();
                         if (jwHtml.includes('coupang-play')) {
-                            // Existence confirmed.
-                            let cpPriceStr = "개별구매(가격 확인 중)";
+                            let cpPriceStr = "가격 확인 중...";
                             let cpPriceVal = 5000;
-                            let isStore = true; // Default to store if ambiguous to avoid false-free
+                            let isStore = true;
 
-                            // Stage 1: Search Naver for exact Real-time Price
+                            // Stage 2: Parallel Search (Naver Mobile + Search result text)
                             try {
-                                const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 가격 정보")}`;
-                                const navRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(naverUrl)}`);
+                                const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(fullTitle + " 쿠팡플레이 가격")}`;
+                                const navProxy = `https://corsproxy.io/?${encodeURIComponent(naverUrl)}`;
+                                const navRes = await fetch(navProxy);
                                 if (navRes.ok) {
                                     const navHtml = await navRes.text();
-                                    const cpIdx = navHtml.indexOf('쿠팡플레이');
-                                    if (cpIdx !== -1) {
-                                        const context = navHtml.substring(cpIdx - 20, cpIdx + 300);
-                                        const pm = context.match(/([0-9,]{3,})\s?원/);
-                                        if (pm) {
-                                            const pVal = parseInt(pm[1].replace(/,/g, ''));
-                                            if (pVal > 0 && pVal < 40000) {
-                                                cpPriceStr = `개별구매 ${pVal.toLocaleString()}원`;
-                                                cpPriceVal = pVal;
-                                                isStore = true;
+
+                                    // Search specifically in <body> and ignore 126-byte stub results
+                                    if (navHtml.length > 500) {
+                                        // Scan ALL occurrences of "쿠팡플레이" in the body text
+                                        const bStart = navHtml.indexOf('<body');
+                                        const bText = bStart !== -1 ? navHtml.substring(bStart) : navHtml;
+
+                                        // We look for currency pattern in a 1000ch range around "쿠팡"
+                                        const cpMatches = [...bText.matchAll(/쿠팡플레이/g)];
+                                        for (const match of cpMatches) {
+                                            const context = bText.substring(match.index - 100, match.index + 800).replace(/<[^>]*>/g, ' ');
+                                            const priceMatch = context.match(/([0-9,]{3,})\s?원/);
+                                            if (priceMatch) {
+                                                const pVal = parseInt(priceMatch[1].replace(/,/g, ''));
+                                                if (pVal > 100 && pVal < 50000) {
+                                                    cpPriceStr = `개별구매 ${pVal.toLocaleString()}원`;
+                                                    cpPriceVal = pVal;
+                                                    break;
+                                                }
                                             }
-                                        } else if (context.includes('무료') || context.includes('와우')) {
-                                            // Only label free if Naver explicitly says so and no price is found
-                                            cpPriceStr = '와우 회원 무료';
-                                            cpPriceVal = 0;
-                                            isStore = false;
                                         }
                                     }
                                 }
                             } catch (e) { }
 
-                            // Stage 2: Final UI Fallback (Never show "Free" unless 100% sure)
+                            // Stage 3: Fallback logic (No price found)
                             if (cpPriceStr.includes('확인 중')) {
-                                // If JustWatch doesn't explicitly have FLATRATE marker in snippet, assume Store
-                                const snippet = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 500);
-                                if (snippet.includes('FLATRATE') && !fullTitle.includes('2') && !fullTitle.includes('3')) {
-                                    cpPriceStr = "와우 회원 무료";
+                                // If JustWatch explicitly says FLATRATE for this movie, show free
+                                const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
+                                if (cpSnip.includes('FLATRATE')) {
+                                    cpPriceStr = '와우 회원 무료';
                                     cpPriceVal = 0;
                                     isStore = false;
                                 } else {
-                                    cpPriceStr = "개별구매(앱에서 확인)";
+                                    // Check for purchase indicator
+                                    cpPriceStr = '개별구매(앱에서 가격 확인)';
                                     isStore = true;
                                 }
                             }
@@ -215,7 +208,7 @@ export const searchOTT = async (query) => {
 
                 if (!finalResults.some(r => r.title === fullTitle && r.ott === pName)) {
                     finalResults.push({
-                        id: `res-v5-${item.id}-${pName}`,
+                        id: `res-v6-${item.id}-${pName}`,
                         title: fullTitle,
                         ott: pName,
                         price: lowestPrice,
