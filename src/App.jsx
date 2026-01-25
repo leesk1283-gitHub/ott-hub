@@ -404,7 +404,7 @@ function App() {
                                                             {item.ottServices.map((svc, sidx) => {
                                                                 const hasWarning = svc.priceText.includes('광고') || svc.priceText.includes('제한');
                                                                 const finalPriceText = hasWarning ? '구독(무료)' : svc.priceText;
-                                                                const finalNote = svc.note || (hasWarning ? '광고형 제외' : null);
+                                                                const finalNote = svc.note || (hasWarning ? '광고형 멤버십 제외' : null);
 
                                                                 return (
                                                                     <div

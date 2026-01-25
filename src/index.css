@@ -18,7 +18,7 @@ body {
   background-color: #030712;
   color: #ffffff;
   min-height: 100vh;
-  overflow-x: hidden;
+  /* overflow-x: hidden handled by responsive structure now */
   user-select: none;
   /* Prevent selection globally */
   cursor: default;
@@ -422,13 +422,12 @@ tr:hover .poster-img {
 @media (max-width: 768px) {
   .container {
     padding: 0 16px;
-    overflow-x: hidden;
-    /* Prevent container scroll */
+    /* overflow-x hidden removed to prevent clipping shadows */
   }
 
   .table-container {
     width: 100%;
-    overflow-x: hidden;
+    /* overflow-x hidden removed */
   }
 
   .center-view {
