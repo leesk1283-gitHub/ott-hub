@@ -468,7 +468,6 @@ tr:hover .poster-img {
     margin-bottom: 20px;
     padding: 16px;
     position: relative;
-    border-right: none !important;
     width: 100%;
     /* Force fit */
   }
