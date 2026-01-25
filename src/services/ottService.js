@@ -101,7 +101,7 @@ export const searchOTT = async (query) => {
                                     texts: [cat === 'flatrate' ? '구독(무료)' : `개별구매`],
                                     prices: [cat === 'flatrate' ? 0 : 5000],
                                     type: cat,
-                                    link: `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`
+                                    link: kr.link || `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`
                                 });
                             });
                         }
@@ -123,6 +123,9 @@ export const searchOTT = async (query) => {
                         providersMap.set(providerName, { name: providerName, texts: [priceText], prices: [priceVal], type: opt.type, link: opt.link });
                     } else {
                         const existing = providersMap.get(providerName);
+                        // 프리미엄 API의 실제 링크가 있으면 기존(구글 검색 등) 링크를 덮어씀
+                        if (opt.link) existing.link = opt.link;
+
                         if (!existing.texts.includes(priceText)) {
                             existing.texts.push(priceText);
                             existing.prices.push(priceVal);
