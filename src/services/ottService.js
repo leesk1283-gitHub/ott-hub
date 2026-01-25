@@ -140,74 +140,72 @@ export const searchOTT = async (query) => {
                         kr[cat]?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play')
                     );
 
-                    if (hasInPremiumApi || hasInTmdb) {
-                        // Step 2: 서버리스 API로 쿠팡 검색 및 가격 확인
-                        let verified = false;
-                        let cpPrice = null;
-                        let cpIsFree = false;
+                    // Step 2: 무조건 서버리스 API로 쿠팡 검색 및 가격 확인 시도
+                    // TMDB 데이터 누락 가능성 대응
+                    let verified = false;
+                    let cpPrice = null;
+                    let cpIsFree = false;
 
-                        try {
-                            // Vercel Serverless Function 호출
-                            // 개발 환경에서는 api/coupang-search.js를 직접 실행하거나 Vercel Dev 사용 필요
-                            const apiUrl = `/api/coupang-search?title=${encodeURIComponent(fullTitle)}`;
-                            const cpRes = await fetch(apiUrl, { signal: AbortSignal.timeout(10000) });
+                    try {
+                        // Vercel Serverless Function 호출
+                        const apiUrl = `/api/coupang-search?title=${encodeURIComponent(fullTitle)}`;
+                        const cpRes = await fetch(apiUrl, { signal: AbortSignal.timeout(10000) });
 
-                            if (cpRes.ok) {
-                                const cpData = await cpRes.json();
-                                verified = cpData.exists;
-                                cpPrice = cpData.rawPrice;
-                                cpIsFree = cpData.isFree;
-                            }
-                        } catch (e) {
-                            // API 실패 시 TMDB/Premium API를 신뢰
-                            verified = true;
+                        if (cpRes.ok) {
+                            const cpData = await cpRes.json();
+                            verified = cpData.exists;
+                            cpPrice = cpData.rawPrice;
+                            cpIsFree = cpData.isFree;
                         }
+                    } catch (e) {
+                        // API 실패 시 기존 TMDB/Premium API 데이터가 있다면 그것을 신뢰
+                        verified = hasInPremiumApi || hasInTmdb;
+                    }
 
-                        if (verified) {
-                            // Step 3: 서버 데이터 우선 사용, 없으면 JustWatch 백업
-                            let isFree = cpIsFree;
-                            let priceVal = cpPrice || 5000;
-                            let priceText = '개별구매';
+                    if (verified) {
+                        // Step 3: 서버 데이터 우선 사용, 없으면 JustWatch 백업
+                        let isFree = cpIsFree;
+                        let priceVal = cpPrice || 5000;
+                        let priceText = '개별구매';
 
-                            if (cpPrice !== null) {
-                                // 서버에서 가격을 찾은 경우
-                                priceText = `개별구매 ${cpPrice.toLocaleString()}원`;
-                            } else if (cpIsFree) {
-                                // 서버에서 무료로 확인된 경우
-                                isFree = true;
+                        if (cpPrice !== null) {
+                            // 서버에서 가격을 찾은 경우
+                            priceText = `개별구매 ${cpPrice.toLocaleString()}원`;
+                        } else if (cpIsFree) {
+                            // 서버에서 무료로 확인된 경우
+                            isFree = true;
+                            priceText = '와우 회원 무료';
+                            priceVal = 0;
+                        } else {
+                            // 서버 데이터가 불충분하면 JustWatch로 재확인 (백업)
+                            try {
+                                const jwUrl = `https://corsproxy.io/?${encodeURIComponent('https://www.justwatch.com/kr/검색?q=' + fullTitle)}`;
+                                const jwRes = await fetch(jwUrl, { signal: AbortSignal.timeout(3000) });
+                                if (jwRes.ok) {
+                                    const jwHtml = await jwRes.text();
+                                    if (jwHtml.includes('coupang-play')) {
+                                        const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
+                                        isFree = cpSnip.includes('FLATRATE');
+                                    }
+                                }
+                            } catch (e) {
+                                // JustWatch 실패 시 TMDB로 판별
+                                isFree = kr?.flatrate?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play') || false;
+                            }
+
+                            if (isFree) {
                                 priceText = '와우 회원 무료';
                                 priceVal = 0;
-                            } else {
-                                // 서버 데이터가 불충분하면 JustWatch로 재확인 (백업)
-                                try {
-                                    const jwUrl = `https://corsproxy.io/?${encodeURIComponent('https://www.justwatch.com/kr/검색?q=' + fullTitle)}`;
-                                    const jwRes = await fetch(jwUrl, { signal: AbortSignal.timeout(3000) });
-                                    if (jwRes.ok) {
-                                        const jwHtml = await jwRes.text();
-                                        if (jwHtml.includes('coupang-play')) {
-                                            const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
-                                            isFree = cpSnip.includes('FLATRATE');
-                                        }
-                                    }
-                                } catch (e) {
-                                    // JustWatch 실패 시 TMDB로 판별
-                                    isFree = kr?.flatrate?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play') || false;
-                                }
-
-                                if (isFree) {
-                                    priceText = '와우 회원 무료';
-                                    priceVal = 0;
-                                }
                             }
-
-                            providersMap.set('Coupang Play', {
-                                name: 'Coupang Play',
-                                texts: [priceText],
-                                prices: [priceVal],
-                                type: isFree ? 'subscription' : 'buy',
-                                link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
-                            });
                         }
+
+                        providersMap.set('Coupang Play', {
+                            name: 'Coupang Play',
+                            texts: [priceText],
+                            prices: [priceVal],
+                            type: isFree ? 'subscription' : 'buy',
+                            link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
+                        });
                     }
                 }
             } catch (e) { }

@@ -43,7 +43,7 @@ export default async function handler(req, res) {
 
         // 검색 결과 분석
         const titleWords = title.split(' ').filter(w => w.length > 1);
-        const exists = html.length > 5000 && titleWords.some(word => html.includes(word));
+        const exists = html.length > 5000 && titleWords.every(word => html.includes(word));
 
         if (!exists) {
             return res.status(200).json({
