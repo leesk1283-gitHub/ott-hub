@@ -131,32 +131,38 @@ export const searchOTT = async (query) => {
 
             // C. Coupang Play - A안: 간소화된 존재 감지 (Simplified Presence Detection)
             // 상세 페이지는 로그인 필요 → 정확한 가격 추출 불가
-            // TMDB에서 먼저 확인 후, JustWatch FLATRATE 마커로 무료/유료만 판별
+            // JustWatch 우선 + Premium API/TMDB 교차 검증으로 오탐지 방지
             try {
-                // Step 1: TMDB에서 쿠팡플레이 존재 여부 먼저 확인 (오탐지 방지)
-                const tmdbHasCoupang = kr && ['flatrate', 'buy', 'rent'].some(cat =>
-                    kr[cat]?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play')
-                );
-
-                if (!providersMap.has('Coupang Play') && tmdbHasCoupang) {
-                    // Step 2: TMDB에서 확인된 경우에만 JustWatch로 무료/유료 판별
+                if (!providersMap.has('Coupang Play')) {
+                    // Step 1: JustWatch에서 쿠팡플레이 확인
                     const jwUrl = `https://corsproxy.io/?${encodeURIComponent('https://www.justwatch.com/kr/검색?q=' + fullTitle)}`;
                     const jwRes = await fetch(jwUrl);
                     if (jwRes.ok) {
                         const jwHtml = await jwRes.text();
                         if (jwHtml.includes('coupang-play')) {
 
-                            // JustWatch FLATRATE 마커만으로 무료/유료 판별
-                            const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
-                            const isFree = cpSnip.includes('FLATRATE');
+                            // Step 2: 교차 검증 - Premium API나 TMDB에도 있는지 확인
+                            const hasInPremiumApi = deepData?.streamingOptions?.kr?.some(opt =>
+                                normalizeProvider(opt.service?.name || opt.service?.id) === 'Coupang Play'
+                            );
+                            const hasInTmdb = kr && ['flatrate', 'buy', 'rent'].some(cat =>
+                                kr[cat]?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play')
+                            );
 
-                            providersMap.set('Coupang Play', {
-                                name: 'Coupang Play',
-                                texts: [isFree ? '와우 회원 무료' : '개별구매(앱에서 가격 확인)'],
-                                prices: [isFree ? 0 : 5000],
-                                type: isFree ? 'subscription' : 'buy',
-                                link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
-                            });
+                            // Premium API나 TMDB 중 하나라도 있으면 표시 (오탐지 아님)
+                            if (hasInPremiumApi || hasInTmdb) {
+                                // JustWatch FLATRATE 마커만으로 무료/유료 판별
+                                const cpSnip = jwHtml.substring(jwHtml.indexOf('coupang-play'), jwHtml.indexOf('coupang-play') + 600);
+                                const isFree = cpSnip.includes('FLATRATE');
+
+                                providersMap.set('Coupang Play', {
+                                    name: 'Coupang Play',
+                                    texts: [isFree ? '와우 회원 무료' : '개별구매(앱에서 가격 확인)'],
+                                    prices: [isFree ? 0 : 5000],
+                                    type: isFree ? 'subscription' : 'buy',
+                                    link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
+                                });
+                            }
                         }
                     }
                 }
