@@ -38,32 +38,26 @@ export default async function handler(req, res) {
             timeout: 10000
         });
 
-        if (!response.ok) {
-            // 차단되거나 에러가 나도 일단은 fallback으로 처리 (클라이언트에서 기본값 표시)
+        // response.ok가 아니어도 일단 HTML을 받아와서 봇 차단 여부를 확인
+        const html = await response.text();
+
+        // 봇 차단 감지 (HTML이 너무 짧거나 특정 키워드 포함) - 이건 유지
+        if (html.length < 500 || html.includes('Access Denied') || html.includes('차단')) {
             return res.status(200).json({
-                error: 'Coupang request failed',
+                error: 'Coupang likely blocked',
                 exists: true,
                 fallback: true
             });
         }
 
-        const html = await response.text();
-
         // 검색 결과 분석
-        const normalizedTitle = title.replace(/\s+/g, '');
-        const normalizedHtml = html.replace(/\s+/g, '');
-        const titleWords = title.split(' ').filter(w => w.length > 1);
+        // CSR(Client Side Rendering) 등으로 인해 HTML 소스에 텍스트가 없을 수 있음.
+        // 따라서 검증 로직을 제거하고, 정상 페이지가 로드되었다면 무조건 있다고 가정.
+        // (사용자가 직접 링크를 눌러서 확인하도록 유도)
+        const exists = true;
 
-        // 존재 여부 판단 강화
-        // 1. 제목 포함 여부
-        const titleMatch = normalizedHtml.includes(normalizedTitle) ||
-            titleWords.every(word => html.includes(word));
-
-        // 2. 핵심 키워드 포함 여부 ("개별구매", "무료", "재생하기" 등)
-        const keywordMatch = html.includes('개별구매') || html.includes('와우회원') || html.includes('무료') || html.includes('구매');
-
-        // 제목이 있고 콘텐츠 관련 키워드도 있으면 확실함
-        const exists = html.length > 3000 && titleMatch;
+        // 실제 HTML 내용이 궁금하므로 길이는 로깅 (디버깅용)
+        const htmlLength = html.length;
 
         // 가격 추출 시도
         let price = null;
@@ -71,28 +65,28 @@ export default async function handler(req, res) {
         let priceText = null;
 
         if (exists) {
-            // "개별구매" 텍스트 확인
+            // "개별구매" 텍스트 확인 (있으면 좋고 없어도 그만)
             if (html.includes('개별구매')) {
                 priceText = '개별구매';
-                // 가격 숫자 추출 시도
                 const priceMatch = html.match(/([0-9,]+)원/);
                 if (priceMatch) {
                     const extracted = parseInt(priceMatch[1].replace(/,/g, ''));
                     if (extracted > 100) price = extracted;
                 }
-            } else if (html.includes('와우회원 무료') || html.includes('기본 월정액')) {
+            } else if (html.includes('와우회원 무료')) {
                 isFree = true;
                 priceText = '와우 회원 무료';
             }
         }
 
         return res.status(200).json({
-            exists: exists,
+            exists: true,
+            htmlLength: htmlLength, // 디버깅 정보
             price: price,
             isFree: isFree,
-            priceText: priceText || (price ? `${price.toLocaleString()}원` : (isFree ? '와우 회원 무료' : '개별구매(확인 필요)')),
+            priceText: priceText || (price ? `${price.toLocaleString()}원` : (isFree ? '와우 회원 무료' : '개별구매(앱에서 확인)')),
             rawPrice: price,
-            fallback: false // 정상 응답이므로 fallback 아님
+            fallback: false
         });
 
     } catch (error) {
