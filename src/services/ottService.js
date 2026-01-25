@@ -235,15 +235,14 @@ export const searchOTT = async (query) => {
                 const combinedText = info.texts.join(' / ');
                 const lowestPrice = Math.min(...info.prices);
 
-                // 중복 체크 로직 간소화: 제목과 OTT 이름이 같은 경우만 스킵
+                // 중복 체크 로직 개선: 제목과 OTT 이름이 모두 정확히 일치할 때만 보수적으로 스킵
                 const alreadyExists = finalResults.some(r =>
-                    r.title.toLowerCase().replace(/\s/g, '') === fullTitle.toLowerCase().replace(/\s/g, '') &&
-                    r.ott === pName
+                    r.title === fullTitle && r.ott === pName
                 );
 
                 if (!alreadyExists) {
                     finalResults.push({
-                        id: `res-v${Date.now()}-${item.id}-${pName.replace(/\s/g, '')}`,
+                        id: `v7-${item.id}-${pName.replace(/\s+/g, '')}`,
                         title: fullTitle,
                         ott: pName,
                         price: lowestPrice,

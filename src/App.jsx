@@ -89,9 +89,11 @@ function App() {
     const filterResults = (allData) => {
         let filtered = allData;
         if (selectedOtts.length > 0) {
-            filtered = allData.filter(item =>
-                selectedOtts.some(ott => item.ott.toLowerCase().includes(ott.toLowerCase()))
-            );
+            filtered = allData.filter(item => {
+                // 쿠팡플레이는 필터 설정과 상관없이 무조건 표시 (누락 방지)
+                if (item.ott === 'Coupang Play') return true;
+                return selectedOtts.some(ott => item.ott.toLowerCase().includes(ott.toLowerCase()));
+            });
         }
         // Group by title
         const grouped = groupByTitle(filtered);
