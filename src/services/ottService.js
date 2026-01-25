@@ -145,6 +145,7 @@ export const searchOTT = async (query) => {
                     let verified = false;
                     let cpPrice = null;
                     let cpIsFree = false;
+                    let isFallback = false;
 
                     try {
                         // Vercel Serverless Function 호출
@@ -156,6 +157,7 @@ export const searchOTT = async (query) => {
                             verified = cpData.exists;
                             cpPrice = cpData.rawPrice;
                             cpIsFree = cpData.isFree;
+                            isFallback = cpData.fallback || false;
                         }
                     } catch (e) {
                         // API 실패 시 기존 TMDB/Premium API 데이터가 있다면 그것을 신뢰
