@@ -83,12 +83,14 @@ export const searchOTT = async (query) => {
             const type = item.media_type || 'movie';
             const fullTitle = item.title || item.name;
             const providersMap = new Map();
+            let kr = null;
+            let deepData = null;
 
             // A. TMDB Watch Providers (Base)
             try {
                 const wpRes = await fetch(`${TMDB_BASE_URL}/${type}/${item.id}/watch/providers?api_key=${TMDB_API_KEY}`);
                 const wpData = await wpRes.json();
-                const kr = wpData.results?.KR;
+                kr = wpData.results?.KR;
                 if (kr) {
                     ['flatrate', 'buy', 'rent'].forEach(cat => {
                         if (kr[cat]) {
@@ -108,7 +110,7 @@ export const searchOTT = async (query) => {
             } catch (e) { }
 
             // B. Premium API (Detailed Prices)
-            const deepData = await fetchByTmdbId(item.id, type);
+            deepData = await fetchByTmdbId(item.id, type);
             if (deepData && deepData.streamingOptions?.kr) {
                 deepData.streamingOptions.kr.forEach(opt => {
                     const providerName = normalizeProvider(opt.service?.name || opt.service?.id);
