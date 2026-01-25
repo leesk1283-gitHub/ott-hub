@@ -335,9 +335,7 @@ function App() {
                                                 <span>검색 중{loadingDots}</span>
                                             </>
                                         ) : (
-                                            <>
-                                                "<span style={{ color: '#60a5fa' }}>{displaySearchTerm}</span>" 결과 <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{filteredResults.length}</span>건
-                                            </>
+                                            "검색 결과"
                                         )}
                                     </h2>
                                     <p className="results-subtitle">현재 한국 OTT 플랫폼 기준 최저가 순입니다.</p>
@@ -349,7 +347,6 @@ function App() {
                                     {filteredResults.length > 0 && (
                                         <thead>
                                             <tr>
-                                                <th className="th-no" style={{ textAlign: 'center', width: '40px' }}><span>No.</span></th>
                                                 <th className="th-content" style={{ textAlign: 'center' }}><span>컨텐츠</span></th>
                                                 <th className="th-price" style={{ textAlign: 'center' }}><span>OTT 가격</span></th>
                                             </tr>
@@ -365,7 +362,6 @@ function App() {
                                                     transition={{ delay: index * 0.05 }}
                                                     style={{ cursor: 'default' }}
                                                 >
-                                                    <td className="no-cell">{index + 1}</td>
                                                     <td className="content-cell">
                                                         <div className="content-wrapper">
                                                             <div className="poster-wrapper">
@@ -402,7 +398,10 @@ function App() {
                                                     <td className="ott-price-cell">
                                                         <div className="ott-price-list">
                                                             {item.ottServices.map((svc, sidx) => {
-                                                                const hasWarning = svc.priceText.includes('광고') || svc.priceText.includes('제한');
+                                                                const hasWarning = svc.priceText.includes('광고') ||
+                                                                    svc.priceText.includes('제한') ||
+                                                                    svc.priceText.includes('라이선스') ||
+                                                                    svc.priceText.length > 25;
                                                                 const finalPriceText = hasWarning ? '구독(무료)' : svc.priceText;
                                                                 const finalNote = svc.note || (hasWarning ? '광고형 멤버십 제외' : null);
 
@@ -431,7 +430,7 @@ function App() {
                                         ) : (
                                             !isSearching && (
                                                 <tr>
-                                                    <td colSpan="3" style={{ padding: '80px', textAlign: 'center', color: '#4b5563' }}>
+                                                    <td colSpan="2" style={{ padding: '80px', textAlign: 'center', color: '#4b5563' }}>
                                                         <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔎</div>
                                                         <div>"{searchTerm}"에 대한 검색 결과가 없습니다.</div>
                                                         <p style={{ marginTop: '12px', fontSize: '14px' }}>필터 설정을 확인하시거나, 보다 넓은 검색을 위해 API 키를 등록해주세요.</p>

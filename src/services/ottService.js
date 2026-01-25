@@ -240,12 +240,14 @@ export const searchOTT = async (query) => {
                     let priceText = p.text;
                     let note = null;
 
-                    if (priceText && (priceText.includes('광고') || priceText.includes('제한'))) {
-                        note = '광고형 제외';
-                        // If text is long (likely the warning message), replace it with standard subscription text
-                        if (priceText.length > 10) {
-                            priceText = '구독(무료)';
-                        }
+                    if (priceText && (
+                        priceText.includes('광고') ||
+                        priceText.includes('제한') ||
+                        priceText.includes('라이선스') ||
+                        priceText.length > 25
+                    )) {
+                        note = '광고형 멤버십 제외';
+                        priceText = '구독(무료)';
                     }
 
                     finalResults.push({

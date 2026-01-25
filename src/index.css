@@ -194,8 +194,12 @@ body {
 }
 
 /* Desktop widths */
+.th-content {
+  width: 50%;
+}
+
 .th-price {
-  width: 360px;
+  width: 50%;
 }
 
 .ott-table th span {
@@ -206,6 +210,7 @@ body {
   letter-spacing: 0.1em;
   background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
   line-height: 1.2;
@@ -238,9 +243,6 @@ body {
   background-color: rgba(59, 130, 246, 0.05);
 }
 
-.ott-table tbody tr:active {
-  transform: scale(0.995);
-}
 
 .ott-table thead:active,
 .ott-table th:active {
@@ -259,19 +261,6 @@ body {
 .ott-price-row,
 .ott-price-row * {
   cursor: pointer !important;
-}
-
-.no-cell {
-  text-align: center;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 900;
-  font-size: 18px;
-  width: 40px;
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  opacity: 0.8;
-  letter-spacing: -0.02em;
 }
 
 .image-cell {
@@ -347,6 +336,8 @@ tr:hover .poster-img {
   gap: 8px;
   font-weight: 600;
   color: #d1d5db;
+  white-space: nowrap;
+  /* Fix split lines for Google Play */
 }
 
 .content-wrapper {
@@ -397,7 +388,11 @@ tr:hover .poster-img {
   padding: 8px 12px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.ott-price-row:active {
+  transform: scale(0.98);
 }
 
 .ott-price-row:hover {
@@ -466,7 +461,8 @@ tr:hover .poster-img {
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 16px;
     margin-bottom: 20px;
-    padding: 16px;
+    padding: 12px;
+    /* Reduced mobile padding */
     position: relative;
     width: auto;
     /* Allow natural fit */
