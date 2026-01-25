@@ -250,6 +250,12 @@ body {
   transition: none !important;
 }
 
+.ott-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
 .ott-table,
 .ott-table * {
   cursor: default !important;

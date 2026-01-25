@@ -24,9 +24,22 @@ function App() {
     const [hasSearched, setHasSearched] = useState(false)
     const [recentSearches, setRecentSearches] = useState(JSON.parse(localStorage.getItem('recent_searches')) || [])
     const [showSettings, setShowSettings] = useState(false)
-    const [selectedOtts, setSelectedOtts] = useState(
-        JSON.parse(localStorage.getItem('selected_otts')) || ALL_OTT_LIST.map(o => o.id)
-    )
+    const [selectedOtts, setSelectedOtts] = useState(() => {
+        const saved = localStorage.getItem('selected_otts');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // 새롭게 추가된 OTT가 있으면 목록에 넣어줌 (예: 쿠팡플레이)
+            const allIds = ALL_OTT_LIST.map(o => o.id);
+            const missing = allIds.filter(id => !parsed.includes(id));
+            if (missing.length > 0) {
+                const updated = [...parsed, ...missing];
+                localStorage.setItem('selected_otts', JSON.stringify(updated));
+                return updated;
+            }
+            return parsed;
+        }
+        return ALL_OTT_LIST.map(o => o.id);
+    })
     const [loadingDots, setLoadingDots] = useState('')
     const [recommendedKeywords, setRecommendedKeywords] = useState([])
     const [displaySearchTerm, setDisplaySearchTerm] = useState('')
@@ -351,6 +364,10 @@ function App() {
 
                             <div className="table-container">
                                 <table className="ott-table">
+                                    <colgroup>
+                                        <col style={{ width: '50%' }} />
+                                        <col style={{ width: '50%' }} />
+                                    </colgroup>
                                     <tbody>
                                         {filteredResults.length > 0 ? (
                                             filteredResults.map((item, index) => (
@@ -361,7 +378,7 @@ function App() {
                                                     transition={{ delay: index * 0.05 }}
                                                     style={{ cursor: 'default' }}
                                                 >
-                                                    <td className="content-cell">
+                                                    <td className="content-cell" style={{ width: '50%' }}>
                                                         <div className="content-wrapper">
                                                             <div className="poster-wrapper">
                                                                 {item.image && (
@@ -394,7 +411,7 @@ function App() {
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="ott-price-cell">
+                                                    <td className="ott-price-cell" style={{ width: '50%' }}>
                                                         <div className="ott-price-list">
                                                             {item.ottServices.map((svc, sidx) => {
                                                                 const hasWarning = svc.priceText.includes('광고') ||

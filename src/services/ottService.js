@@ -160,9 +160,12 @@ export const searchOTT = async (query) => {
                             isFallback = cpData.fallback || false;
                         }
                     } catch (e) {
-                        // API 실패 시 기존 TMDB/Premium API 데이터가 있다면 그것을 신뢰
-                        verified = hasInPremiumApi || hasInTmdb;
+                        console.error('Coupang API call fatal error:', e);
+                        verified = true;
+                        isFallback = true;
                     }
+
+                    console.log(`Coupang Search for "${fullTitle}": verified=${verified}, fallback=${isFallback}`);
 
                     if (verified) {
                         // Step 3: 서버 데이터 우선 사용, 없으면 JustWatch 백업
