@@ -176,6 +176,19 @@ export const searchOTT = async (query) => {
                             isFree = true;
                             priceText = '와우 회원 무료';
                             priceVal = 0;
+                        } else if (isFallback) {
+                            // 쿠팡 서버가 봇을 차단한 경우 (Fallback)
+                            // JustWatch 확인 없이 안전하게 표시 (오차단 방지보다 표시 우선)
+                            // TMDB에서 무료(flatrate)라고 했으면 무료로, 아니면 개별구매로 표시
+                            isFree = kr?.flatrate?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play') || false;
+
+                            if (isFree) {
+                                priceText = '와우 회원 무료';
+                                priceVal = 0;
+                            } else {
+                                priceText = '개별구매';
+                                priceVal = 5000;
+                            }
                         } else {
                             // 서버 데이터가 불충분하면 JustWatch로 재확인 (백업)
                             try {
