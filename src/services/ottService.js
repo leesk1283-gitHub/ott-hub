@@ -26,6 +26,24 @@ async function fetchByTmdbId(tmdbId, mediaType) {
     return null;
 }
 
+// OTT별 공식 사이트 다이렉트 검색 링크 생성
+const getDirectSearchLink = (ottName, title) => {
+    const query = encodeURIComponent(title);
+    const lowName = ottName.toLowerCase();
+
+    if (lowName.includes('netflix')) return `https://www.netflix.com/search?q=${query}`;
+    if (lowName.includes('disney')) return `https://www.disneyplus.com/search?q=${query}`;
+    if (lowName.includes('tving')) return `https://www.tving.com/search/all?keyword=${query}`;
+    if (lowName.includes('wavve')) return `https://www.wavve.com/search/search?searchkeyword=${query}`;
+    if (lowName.includes('watcha')) return `https://watcha.com/search?query=${query}`;
+    if (lowName.includes('apple')) return `https://tv.apple.com/kr/search?term=${query}`;
+    if (lowName.includes('google')) return `https://play.google.com/store/search?q=${query}&c=movies`;
+    if (lowName.includes('naver')) return `https://serieson.naver.com/v2/search?query=${query}`;
+    if (lowName.includes('youtube')) return `https://www.youtube.com/results?search_query=${query}`;
+
+    return `https://www.google.com/search?q=${encodeURIComponent(title + " " + ottName)}`;
+};
+
 export const searchOTT = async (query) => {
     if (!query || !TMDB_API_KEY) return [];
 
@@ -103,7 +121,7 @@ export const searchOTT = async (query) => {
                                     texts: [cat === 'flatrate' ? '구독(무료)' : `개별구매`],
                                     prices: [cat === 'flatrate' ? 0 : 5000],
                                     type: cat,
-                                    link: null // 일단 비워둠 (실제 링크를 위해서)
+                                    link: getDirectSearchLink(pName, fullTitle) // 다이렉트 링크 사용!
                                 });
                             });
                         }
@@ -175,13 +193,12 @@ export const searchOTT = async (query) => {
                 const combinedText = info.texts.join(' / ');
                 const lowestPrice = Math.min(...info.prices);
 
-                // 링크 결정 순위: 1. Premium API 딥링크, 2. TMDB 공식 시청 페이지, 3. 최후의 수단 구글 검색
-                const finalLink = info.link ||
-                    (kr && kr.link) ||
-                    `https://www.google.com/search?q=${encodeURIComponent(fullTitle + " " + pName)}`;
+                // 이미 위에서 getDirectSearchLink 또는 opt.link로 채워진 링크를 그대로 사용
+                // (구글 검색이나 TMDB 중계 페이지는 더 이상 사용하지 않음)
+                const finalLink = info.link;
 
                 finalResults.push({
-                    id: `v10-${item.id}-${pName.replace(/\s+/g, '')}`,
+                    id: `v11-${item.id}-${pName.replace(/\s+/g, '')}`,
                     title: fullTitle,
                     ott: pName,
                     price: lowestPrice,
