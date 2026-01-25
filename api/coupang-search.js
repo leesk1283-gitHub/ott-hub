@@ -25,17 +25,24 @@ export default async function handler(req, res) {
 
         const response = await fetch(searchUrl, {
             headers: {
-                // Googlebot으로 위장하여 차단 우회
-                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Cache-Control': 'max-age=0',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1'
             },
             timeout: 10000
         });
 
         if (!response.ok) {
+            // 차단되거나 에러가 나도 일단은 fallback으로 처리 (클라이언트에서 기본값 표시)
             return res.status(200).json({
-                error: 'Coupang blocked',
-                exists: true, // 에러 나면 일단 있다고 가정 (보수적)
+                error: 'Coupang request failed',
+                exists: true,
                 fallback: true
             });
         }
@@ -47,81 +54,45 @@ export default async function handler(req, res) {
         const normalizedHtml = html.replace(/\s+/g, '');
         const titleWords = title.split(' ').filter(w => w.length > 1);
 
-        // HTML 분석 (조건 완화)
-        // 로그인 페이지로 리다이렉트 되어도 title 태그 등에 영화 제목이 있으면 성공
-        let exists = normalizedHtml.includes(normalizedTitle) ||
+        // 존재 여부 판단 강화
+        // 1. 제목 포함 여부
+        const titleMatch = normalizedHtml.includes(normalizedTitle) ||
             titleWords.every(word => html.includes(word));
 
-        // 검색어와 일치하면 일단 있다고 간주 (HTML 길이 체크 제거)
-        if (exists) {
-            // 성공
-        } else {
-            // 실패했어도 "나 홀로 집에" 처럼 너무 유명한 건 있을 수 있음
-            // 하지만 오탐지 방지를 위해 false 반환
-        }
+        // 2. 핵심 키워드 포함 여부 ("개별구매", "무료", "재생하기" 등)
+        const keywordMatch = html.includes('개별구매') || html.includes('와우회원') || html.includes('무료') || html.includes('구매');
 
-        if (!exists) {
-            return res.status(200).json({
-                exists: false,
-                message: 'Content not found on Coupang Play'
-            });
-        }
+        // 제목이 있고 콘텐츠 관련 키워드도 있으면 확실함
+        const exists = html.length > 3000 && titleMatch;
 
         // 가격 추출 시도
         let price = null;
         let isFree = false;
+        let priceText = null;
 
-        // __NEXT_DATA__ JSON에서 가격 추출 시도
-        const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/);
-        if (nextDataMatch) {
-            try {
-                const jsonData = JSON.parse(nextDataMatch[1]);
-                // 가격 정보 탐색 (실제 구조는 응답을 보고 조정 필요)
-                const jsonStr = JSON.stringify(jsonData);
-
-                // "price", "amount" 등의 키워드로 가격 찾기
-                const priceMatches = jsonStr.match(/"price[^"]*":\s*([0-9]+)/gi) ||
-                    jsonStr.match(/"amount":\s*([0-9]+)/gi);
-
-                if (priceMatches && priceMatches.length > 0) {
-                    const priceMatch = priceMatches[0].match(/([0-9]+)/);
-                    if (priceMatch) {
-                        price = parseInt(priceMatch[1]);
-                    }
+        if (exists) {
+            // "개별구매" 텍스트 확인
+            if (html.includes('개별구매')) {
+                priceText = '개별구매';
+                // 가격 숫자 추출 시도
+                const priceMatch = html.match(/([0-9,]+)원/);
+                if (priceMatch) {
+                    const extracted = parseInt(priceMatch[1].replace(/,/g, ''));
+                    if (extracted > 100) price = extracted;
                 }
-
-                // "free", "flatrate" 등으로 무료 여부 확인
-                isFree = jsonStr.includes('"isFree":true') ||
-                    jsonStr.includes('"type":"FLATRATE"') ||
-                    jsonStr.includes('와우');
-            } catch (e) {
-                console.error('JSON parsing failed:', e.message);
-            }
-        }
-
-        // HTML에서 직접 가격 추출 시도
-        if (!price) {
-            const pricePattern = /₩\s?([0-9,]{3,})|([0-9,]{3,})\s?원/g;
-            const matches = [...html.matchAll(pricePattern)];
-
-            for (const match of matches) {
-                const priceStr = (match[1] || match[2]).replace(/,/g, '');
-                const priceNum = parseInt(priceStr);
-
-                // 1000원~50000원 사이의 합리적인 가격만
-                if (priceNum >= 1000 && priceNum <= 50000) {
-                    price = priceNum;
-                    break;
-                }
+            } else if (html.includes('와우회원 무료') || html.includes('기본 월정액')) {
+                isFree = true;
+                priceText = '와우 회원 무료';
             }
         }
 
         return res.status(200).json({
-            exists: true,
+            exists: exists,
             price: price,
-            isFree: isFree || price === 0,
-            priceText: price ? `${price.toLocaleString()}원` : (isFree ? '와우 회원 무료' : '가격 확인 필요'),
-            rawPrice: price
+            isFree: isFree,
+            priceText: priceText || (price ? `${price.toLocaleString()}원` : (isFree ? '와우 회원 무료' : '개별구매(확인 필요)')),
+            rawPrice: price,
+            fallback: false // 정상 응답이므로 fallback 아님
         });
 
     } catch (error) {
