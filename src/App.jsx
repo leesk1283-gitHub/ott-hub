@@ -459,6 +459,70 @@ function App() {
                             </div>
                         </motion.div>
                     )}
+
+                    <AnimatePresence>
+                        {showSettings && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="modal-overlay"
+                                onClick={() => setShowSettings(false)}
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.9, y: 20 }}
+                                    animate={{ scale: 1, y: 0 }}
+                                    exit={{ scale: 0.9, y: 20 }}
+                                    className="settings-modal"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="modal-header">
+                                        <h3 className="modal-title">OTT 필터 설정</h3>
+                                        <button className="modal-close" onClick={() => setShowSettings(false)}>
+                                            <X size={24} />
+                                        </button>
+                                    </div>
+
+                                    <div style={{ marginBottom: '20px' }}>
+                                        <button
+                                            onClick={toggleAllOtts}
+                                            style={{
+                                                background: 'rgba(255,255,255,0.05)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                color: '#fff',
+                                                padding: '8px 16px',
+                                                borderRadius: '8px',
+                                                fontSize: '14px',
+                                                cursor: 'pointer',
+                                                marginBottom: '10px'
+                                            }}
+                                        >
+                                            {selectedOtts.length === ALL_OTT_LIST.length ? '전체 해제' : '전체 선택'}
+                                        </button>
+                                    </div>
+
+                                    <div className="ott-grid">
+                                        {ALL_OTT_LIST.map((ott) => (
+                                            <div
+                                                key={ott.id}
+                                                className={`ott-option ${selectedOtts.includes(ott.id) ? 'selected' : ''}`}
+                                                onClick={() => toggleOtt(ott.id)}
+                                            >
+                                                <div className="check-circle">
+                                                    {selectedOtts.includes(ott.id) && <Check size={12} color="white" />}
+                                                </div>
+                                                <span className="ott-label">{ott.name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button className="save-btn" onClick={() => setShowSettings(false)}>
+                                        확인
+                                    </button>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </AnimatePresence>
             </div>
         </div>
