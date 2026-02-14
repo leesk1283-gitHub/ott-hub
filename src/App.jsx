@@ -356,9 +356,7 @@ function App() {
                                                 <Loader2 className="animate-spin" size={24} color="#3b82f6" />
                                                 <span>{loadingDots}</span>
                                             </>
-                                        ) : (
-                                            "검색 결과"
-                                        )}
+                                        ) : null}
                                     </h2>
                                 </div>
                             </div>
