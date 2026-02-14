@@ -20,115 +20,74 @@ export default async function handler(req, res) {
     }
 
     try {
-        // 쿠팡플레이 검색
-        const searchUrl = `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(title)}`;
-
-        const response = await fetch(searchUrl, {
+        // 1. JustWatch 검색 (한국어)
+        const searchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(title)}`;
+        const searchRes = await fetch(searchUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Cache-Control': 'max-age=0',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             },
-            timeout: 10000
+            signal: AbortSignal.timeout(5000) // 5초 타임아웃
         });
 
-        // response.ok가 아니어도 일단 HTML을 받아와서 봇 차단 여부를 확인
-        const html = await response.text();
+        if (!searchRes.ok) throw new Error('JustWatch Search Failed');
 
-        // 봇 차단 감지 (HTML이 너무 짧거나 특정 키워드 포함) - 이건 유지
-        if (html.length < 500 || html.includes('Access Denied') || html.includes('차단')) {
+        const searchHtml = await searchRes.text();
+
+        // 2. 검색 결과에서 첫 번째 콘텐츠 링크 추출
+        // 패턴: href="/kr/영화/..." 또는 href="/kr/TV_프로그램/..."
+        const linkMatch = searchHtml.match(/href="(\/kr\/(?:영화|TV_프로그램)\/[^"]+)"/);
+
+        if (!linkMatch) {
             return res.status(200).json({
-                error: 'Coupang likely blocked',
-                exists: false, // 차단되면 확인 불가하므로 '없음'으로 처리
-                fallback: true
+                exists: false,
+                message: 'Content not found in JustWatch',
+                fallback: false
             });
         }
 
-        // 검색 결과 분석
-        // CSR(Client Side Rendering) 등으로 인해 HTML 소스에 텍스트가 없을 수 있음.
-        // 확인되지 않으면 기본적으로 '없음'으로 간주
-        const exists = false;
+        const detailPath = linkMatch[1];
+        const detailUrl = `https://www.justwatch.com${detailPath}`;
 
-        // 실제 HTML 내용이 궁금하므로 길이는 로깅 (디버깅용)
-        const htmlLength = html.length;
+        // 3. 상세 페이지 접속
+        const detailRes = await fetch(detailUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            signal: AbortSignal.timeout(5000)
+        });
 
-        // 가격 추출 시도
-        let price = null;
+        if (!detailRes.ok) throw new Error('JustWatch Detail Failed');
+
+        const detailHtml = await detailRes.text();
+
+        // 4. 쿠팡플레이 존재 여부 확인
+        // 이미지의 alt 속성이나 title 속성으로 확인
+        // "Coupang Play" 문자열이 포함되어 있는지 (단순 포함 여부만 확인해도 됨, 상세 페이지니까)
+        // 하지만 더 정확히 하기 위해 alt="Coupang Play" 등을 찾음
+        const exists = detailHtml.includes('alt="Coupang Play"') || detailHtml.includes('title="Coupang Play"');
+
+        // 가격 정보 추출 (옵션)
+        // JustWatch HTML 구조가 복잡해서 정확한 가격 추출은 어려울 수 있으므로 '개별구매' 여부 정도만
+        // 일단 존재하면 '구독/개별구매' 텍스트 반환
+        let priceText = '검색(이동)';
         let isFree = false;
-        let priceText = null;
 
+        // 정액제(구독) 섹션에 있는지 확인하려면 더 복잡한 파싱 필요함.
+        // 현재는 '있음' 여부만 확실히 알려주는 게 목표.
         if (exists) {
-            // "개별구매" 텍스트 확인 (있으면 좋고 없어도 그만)
-            if (html.includes('개별구매')) {
-                priceText = '개별구매';
-                const priceMatch = html.match(/([0-9,]+)원/);
-                if (priceMatch) {
-                    const extracted = parseInt(priceMatch[1].replace(/,/g, ''));
-                    if (extracted > 100) price = extracted;
-                }
-            } else if (html.includes('와우회원 무료')) {
-                isFree = true;
-                priceText = '와우 회원 무료';
-            }
+            // "정액제" 섹션 근처에 있는지 확인하는 건 정규식으로 하기 힘듦.
+            // 기본값으로 설정.
+            priceText = '보기';
         }
-
-        // JSON 데이터 추출 시도 (__NEXT_DATA__)
-        let debugInfo = { foundNextData: false, dataLength: 0, reason: '' };
-        const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/);
-
-        if (nextDataMatch && nextDataMatch[1]) {
-            debugInfo.foundNextData = true;
-            debugInfo.dataLength = nextDataMatch[1].length;
-
-            try {
-                const jsonData = JSON.parse(nextDataMatch[1]);
-                const jsonStr = JSON.stringify(jsonData);
-
-                // 가격 관련 키워드 검색
-                // 쿠팡플레이 데이터 구조 추정: "price", "productPrice", "originalPrice" 등
-                const priceMatch = jsonStr.match(/"price":\s*([0-9]+)/) ||
-                    jsonStr.match(/"amount":\s*([0-9]+)/);
-
-                if (priceMatch) {
-                    price = parseInt(priceMatch[1]);
-                    debugInfo.priceFoundInJson = true;
-                }
-
-                // 무료 관련 키워드 검색
-                if (jsonStr.includes('"isFree":true') || jsonStr.includes('FLATRATE') || jsonStr.includes('WowOnly')) {
-                    isFree = true;
-                    debugInfo.isFreeFoundInJson = true;
-                }
-
-                // 디버깅을 위해 JSON 일부 포함 (너무 길면 자름)
-                debugInfo.snippet = jsonStr.substring(0, 500);
-
-            } catch (e) {
-                debugInfo.error = e.message;
-            }
-        } else {
-            debugInfo.reason = 'No __NEXT_DATA__ script found in HTML';
-        }
-
-        // 쿠팡플레이는 제목이 포함되어 있는지로 판단
-        // 검색 결과 페이지의 HTML 내에 영화 제목이 있으면 존재하는 것으로 판정
-        const contentExists = html.includes(title) || (jsonData && JSON.stringify(jsonData).includes(title));
 
         return res.status(200).json({
-            exists: contentExists,
-            htmlLength: htmlLength,
-            price: price,
+            exists: exists,
+            price: 0,
             isFree: isFree,
-            priceText: priceText || (price ? `${price.toLocaleString()}원` : (isFree ? '와우 회원 무료' : '개별구매(앱에서 확인)')),
-            rawPrice: price,
+            priceText: priceText,
+            rawPrice: 0,
             fallback: false,
-            debug: debugInfo
+            link: detailUrl // JustWatch 링크를 줄 수도 있음
         });
 
     } catch (error) {
@@ -136,7 +95,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
             error: 'Server error',
             message: error.message,
-            exists: false, // 에러 시에는 우선 없다고 함 (오표시 방지)
+            exists: false,
             fallback: true
         });
     }
