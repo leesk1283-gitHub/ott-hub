@@ -20,24 +20,60 @@ export default async function handler(req, res) {
     }
 
     try {
-        // 1. JustWatch 검색 (한국어)
-        const searchUrl = `https://www.justwatch.com/kr/검색?q=${encodeURIComponent(title)}`;
-        const searchRes = await fetch(searchUrl, {
+        // JustWatch GraphQL API 엔드포인트
+        const graphqlUrl = 'https://apis.justwatch.com/content/graphql';
+
+        // GraphQL 쿼리 정의
+        const query = `
+            query GetSuggestedTitles($country: Country!, $language: Language!, $filter: TitleFilter) {
+                popularTitles(country: $country, filter: $filter) {
+                    edges {
+                        node {
+                            content(country: $country, language: $language) {
+                                title
+                                originalTitle
+                                offers {
+                                    monetizationType
+                                    provider {
+                                        id
+                                        shortName
+                                        clearName
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        `;
+
+        // 변수 설정
+        const variables = {
+            country: "KR",
+            language: "ko",
+            filter: { searchQuery: title }
+        };
+
+        const response = await fetch(graphqlUrl, {
+            method: 'POST',
             headers: {
+                'Content-Type': 'application/json',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             },
-            signal: AbortSignal.timeout(5000) // 5초 타임아웃
+            body: JSON.stringify({ query, variables }),
+            signal: AbortSignal.timeout(5000)
         });
 
-        if (!searchRes.ok) throw new Error('JustWatch Search Failed');
+        if (!response.ok) {
+            throw new Error(`JustWatch API Error: ${response.status}`);
+        }
 
-        const searchHtml = await searchRes.text();
+        const result = await response.json();
 
-        // 2. 검색 결과에서 첫 번째 콘텐츠 링크 추출
-        // 패턴: href="/kr/영화/..." 또는 href="/kr/TV_프로그램/..."
-        const linkMatch = searchHtml.match(/href="(\/kr\/(?:영화|TV_프로그램)\/[^"]+)"/);
+        // 데이터 파싱
+        const edges = result.data?.popularTitles?.edges || [];
 
-        if (!linkMatch) {
+        if (edges.length === 0) {
             return res.status(200).json({
                 exists: false,
                 message: 'Content not found in JustWatch',
@@ -45,49 +81,44 @@ export default async function handler(req, res) {
             });
         }
 
-        const detailPath = linkMatch[1];
-        const detailUrl = `https://www.justwatch.com${detailPath}`;
+        // 첫 번째 결과 사용 (가장 정확도 높음)
+        const firstNode = edges[0].node;
+        const offers = firstNode.content?.offers || [];
 
-        // 3. 상세 페이지 접속
-        const detailRes = await fetch(detailUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            signal: AbortSignal.timeout(5000)
-        });
+        // 쿠팡플레이 존재 여부 확인
+        // shortName: 'cpx', clearName: 'Coupang Play'
+        const coupangOffer = offers.find(offer =>
+            offer.provider?.shortName === 'cpx' ||
+            offer.provider?.clearName === 'Coupang Play'
+        );
 
-        if (!detailRes.ok) throw new Error('JustWatch Detail Failed');
-
-        const detailHtml = await detailRes.text();
-
-        // 4. 쿠팡플레이 존재 여부 확인
-        // 이미지의 alt 속성이나 title 속성으로 확인
-        // "Coupang Play" 문자열이 포함되어 있는지 (단순 포함 여부만 확인해도 됨, 상세 페이지니까)
-        // 하지만 더 정확히 하기 위해 alt="Coupang Play" 등을 찾음
-        const exists = detailHtml.includes('alt="Coupang Play"') || detailHtml.includes('title="Coupang Play"');
-
-        // 가격 정보 추출 (옵션)
-        // JustWatch HTML 구조가 복잡해서 정확한 가격 추출은 어려울 수 있으므로 '개별구매' 여부 정도만
-        // 일단 존재하면 '구독/개별구매' 텍스트 반환
-        let priceText = '검색(이동)';
+        const exists = !!coupangOffer;
         let isFree = false;
+        let priceText = '검색(이동)';
+        let price = 0;
 
-        // 정액제(구독) 섹션에 있는지 확인하려면 더 복잡한 파싱 필요함.
-        // 현재는 '있음' 여부만 확실히 알려주는 게 목표.
         if (exists) {
-            // "정액제" 섹션 근처에 있는지 확인하는 건 정규식으로 하기 힘듦.
-            // 기본값으로 설정.
-            priceText = '보기';
+            // monetizationType: 'FLATRATE' (구독), 'BUY' (구매), 'RENT' (대여)
+            if (coupangOffer.monetizationType === 'FLATRATE') {
+                isFree = true;
+                priceText = '와우 회원 무료';
+            } else if (coupangOffer.monetizationType === 'BUY') {
+                priceText = '개별구매';
+                price = 5000; // 예상 가격
+            } else if (coupangOffer.monetizationType === 'RENT') {
+                priceText = '대여';
+                price = 1200; // 예상 가격
+            }
         }
 
         return res.status(200).json({
             exists: exists,
-            price: 0,
+            price: price,
             isFree: isFree,
             priceText: priceText,
-            rawPrice: 0,
+            rawPrice: price,
             fallback: false,
-            link: detailUrl // JustWatch 링크를 줄 수도 있음
+            providerName: 'JustWatch GraphQL'
         });
 
     } catch (error) {
