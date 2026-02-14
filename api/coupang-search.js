@@ -45,16 +45,15 @@ export default async function handler(req, res) {
         if (html.length < 500 || html.includes('Access Denied') || html.includes('차단')) {
             return res.status(200).json({
                 error: 'Coupang likely blocked',
-                exists: true,
+                exists: false, // 차단되면 확인 불가하므로 '없음'으로 처리
                 fallback: true
             });
         }
 
         // 검색 결과 분석
         // CSR(Client Side Rendering) 등으로 인해 HTML 소스에 텍스트가 없을 수 있음.
-        // 따라서 검증 로직을 제거하고, 정상 페이지가 로드되었다면 무조건 있다고 가정.
-        // (사용자가 직접 링크를 눌러서 확인하도록 유도)
-        const exists = true;
+        // 확인되지 않으면 기본적으로 '없음'으로 간주
+        const exists = false;
 
         // 실제 HTML 내용이 궁금하므로 길이는 로깅 (디버깅용)
         const htmlLength = html.length;

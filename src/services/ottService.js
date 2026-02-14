@@ -162,8 +162,9 @@ export const searchOTT = async (query) => {
 
                 if (cpRes.ok) {
                     const cpData = await cpRes.json();
-                    // API가 명확하 확인해준 서비스만 표시 (exists: true)
-                    if (cpData && cpData.exists) {
+                    // API가 명확히 확인해준 서비스만 표시 (exists: true)
+                    // fallback: true 인 경우는 봇 차단 등으로 확인 불가한 상태이므로 '없음'으로 간주하여 표시하지 않음
+                    if (cpData && cpData.exists && !cpData.fallback) {
                         const isFree = cpData.isFree || false;
                         const priceText = cpData.priceText || (cpData.fallback ? '개별구매' : '개별구매');
                         const priceVal = cpData.rawPrice || (isFree ? 0 : 5000);
