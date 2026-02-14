@@ -350,7 +350,7 @@ function App() {
                         >
                             <div className="results-header">
                                 <div>
-                                    <h2 className="results-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <h2 className="results-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '40px' }}>
                                         {isSearching ? (
                                             <>
                                                 <Loader2 className="animate-spin" size={24} color="#3b82f6" />
