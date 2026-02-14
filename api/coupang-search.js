@@ -61,10 +61,10 @@ export default async function handler(req, res) {
 
         const detailHtml = await detailRes.text();
 
-        // 쿠팡플레이 확인
-        // 이미지 alt나 텍스트 등 다양한 방식으로 확인
-        // "Coupang Play" (영문), "쿠팡플레이" (한글) 모두 체크
-        const exists = detailHtml.includes('Coupang Play') || detailHtml.includes('쿠팡플레이');
+        // 중요: 단순 텍스트 "Coupang Play"는 필터바 등에도 존재하여 오탐 발생
+        // "shortName":"cpx" 패턴이 실제 오퍼(Offer) 정보에 포함된 것으로 확인됨 ("Home Alone 1" vs "4" 테스트 결과)
+        // cpx는 JustWatch 내부에서 Coupang Play(혹은 연동된 식별자)를 의미
+        const exists = /"shortName":"cpx"/.test(detailHtml);
 
         let priceText = '검색(이동)';
         let isFree = false;
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
             rawPrice: price,
             fallback: false,
             link: detailUrl,
-            providerName: 'JustWatch Web Scraping'
+            providerName: 'JustWatch Web Scraping (cpx check)'
         });
 
     } catch (error) {
@@ -94,7 +94,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
             error: 'Server error',
             message: error.message,
-            exists: false,
+            exists: false, // 에러 발생 시 없음으로 처리
             fallback: true
         });
     }
