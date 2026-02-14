@@ -61,21 +61,61 @@ export default async function handler(req, res) {
 
         const detailHtml = await detailRes.text();
 
-        // 중요: 단순 텍스트 "Coupang Play"는 필터바 등에도 존재하여 오탐 발생
-        // "shortName":"cpx" 패턴이 실제 오퍼(Offer) 정보에 포함된 것으로 확인됨 ("Home Alone 1" vs "4" 테스트 결과)
-        // cpx는 JustWatch 내부에서 Coupang Play(혹은 연동된 식별자)를 의미
-        const exists = /"shortName":"cpx"/.test(detailHtml);
-
+        // Offer ID 파싱 및 디코딩 (가장 정확한 방법)
+        // "Offer:BASE64String" 형태의 키를 찾아서 디코딩
+        const offerRegex = /"Offer:([^"]+)"/g;
+        let match;
+        let exists = false;
         let priceText = '검색(이동)';
         let isFree = false;
         let price = 0;
 
-        if (exists) {
-            // 상세 페이지에서 "정액제" 섹션에 있는지 등을 파악하면 좋겠지만
-            // HTML 구조가 복잡하므로 일단 존재하면 '보기'로 표기
-            priceText = '보기';
-            // 무료 여부는 알 수 없으나 보통 구독제이므로
-            isFree = true;
+        while ((match = offerRegex.exec(detailHtml)) !== null) {
+            const encodedId = match[1];
+            try {
+                // base64 디코딩
+                const decodedToken = Buffer.from(encodedId, 'base64').toString('utf-8');
+
+                // 한국(KR)의 쿠팡플레이(cou) 오퍼인지 확인
+                if (decodedToken.includes(':KR:') && decodedToken.includes(':cou:')) {
+                    exists = true;
+
+                    // Offer JSON 데이터 파싱을 위해 주변 문자열 추출
+                    // "Offer:ID":{...}
+                    const jsonStart = detailHtml.indexOf(`"Offer:${encodedId}"`);
+                    if (jsonStart !== -1) {
+                        const snippet = detailHtml.substring(jsonStart, jsonStart + 600);
+
+                        // monetizationType 추출
+                        const typeMatch = snippet.match(/"monetizationType":"([^"]+)"/);
+                        const type = typeMatch ? typeMatch[1] : '';
+
+                        // retailPrice 추출
+                        const priceMatch = snippet.match(/"retailPrice(?:\([^)]+\))?":([^,}]+)/);
+
+                        const rawPriceVal = priceMatch ? priceMatch[1] : '0';
+                        // 숫자가 아니거나 null일 수 있음
+                        price = parseFloat(rawPriceVal) || 0;
+
+                        if (type === 'FLATRATE') {
+                            isFree = true;
+                            priceText = '와우 회원 무료';
+                        } else if (type === 'RENT') {
+                            priceText = `대여 ${price.toLocaleString()}원`;
+                        } else if (type === 'BUY') {
+                            priceText = `구매 ${price.toLocaleString()}원`;
+                        } else if (type === 'FREE') {
+                            isFree = true;
+                            priceText = '무료';
+                        } else {
+                            priceText = '보기';
+                        }
+                    }
+                    break; // 찾았으면 중단
+                }
+            } catch (e) {
+                // 디코딩 에러 무시
+            }
         }
 
         return res.status(200).json({
