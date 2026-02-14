@@ -99,7 +99,10 @@ export const searchOTT = async (query) => {
         const processedCollectionIds = new Set();
 
         // 1. Collection Expansion (시리즈물 챙기기)
-        for (const item of searchData.results.slice(0, 4)) {
+        // searchData.results 대신 filteredRaw를 사용하여, 필터링된 정확한 결과에 대해서만 시리즈를 확장함
+        // 이를 통해 "나홀로집에" 검색 시 순위가 낮았던 "나 홀로 집에 1"이 상위로 올라와 시리즈가 확장되고,
+        // 관련 없는 "어둠 속에 나홀로" 등은 필터링되어 시리즈 확장을 막음
+        for (const item of filteredRaw.slice(0, 4)) {
             if (item.media_type === 'movie') {
                 try {
                     const detailRes = await fetch(`${TMDB_BASE_URL}/movie/${item.id}?api_key=${TMDB_API_KEY}&language=ko-KR`);

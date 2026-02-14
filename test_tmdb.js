@@ -18,5 +18,5 @@ async function testSearch(query) {
     }
 }
 
-testSearch('최악');
-testSearch('최악의');
+testSearch('나홀로집에');
+testSearch('나홀');
