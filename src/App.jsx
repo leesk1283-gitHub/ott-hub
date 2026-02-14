@@ -354,13 +354,12 @@ function App() {
                                         {isSearching ? (
                                             <>
                                                 <Loader2 className="animate-spin" size={24} color="#3b82f6" />
-                                                <span>검색 중{loadingDots}</span>
+                                                <span>{loadingDots}</span>
                                             </>
                                         ) : (
                                             "검색 결과"
                                         )}
                                     </h2>
-                                    <p className="results-subtitle">현재 한국 OTT 플랫폼 기준 최저가 순입니다.</p>
                                 </div>
                             </div>
 

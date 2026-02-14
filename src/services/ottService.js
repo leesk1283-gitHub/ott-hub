@@ -73,7 +73,13 @@ export const searchOTT = async (query) => {
 
         if (!searchData.results) return [];
 
-        const itemsToProcess = [...searchData.results.slice(0, 16)];
+        // Exact substring match filter (ignoring spaces)
+        const filteredRaw = searchData.results.filter(item => {
+            const title = (item.title || item.name || '').replace(/\s+/g, '').toLowerCase();
+            return title.includes(queryNoSpace);
+        });
+
+        const itemsToProcess = [...filteredRaw.slice(0, 16)];
         const processedCollectionIds = new Set();
 
         // 1. Collection Expansion (시리즈물 챙기기)
