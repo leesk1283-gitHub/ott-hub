@@ -124,8 +124,8 @@ export default async function handler(req, res) {
             const cpxExists = /"shortName":"cpx"/.test(detailHtml);
             if (cpxExists) {
                 exists = true;
-                isFree = true;
-                priceText = '와우 회원 무료'; // 상세 정보를 못 찾았지만 존재한다면 대부분 구독 무료
+                isFree = false; // 무료 여부 불확실
+                priceText = '가격 확인 필요';
             }
         }
 
