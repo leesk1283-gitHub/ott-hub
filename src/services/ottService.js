@@ -71,6 +71,22 @@ export const searchOTT = async (query) => {
         if (!searchRes.ok) return [];
         let searchData = await searchRes.json();
 
+        if (!searchData.results || searchData.results.length === 0) {
+            // Fallback for Korean space-sensitive search (e.g., "최악의악" returns 0 results, needs "최악")
+            if (queryNoSpace.length >= 2 && !queryClean.includes(' ')) {
+                try {
+                    const fallbackQuery = queryClean.substring(0, 2);
+                    const fallbackRes = await fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(fallbackQuery)}&language=ko-KR&page=1`);
+                    const fallbackData = await fallbackRes.json();
+                    if (fallbackData.results) {
+                        searchData = fallbackData;
+                    }
+                } catch (e) {
+                    // Fallback failed, keep empty results
+                }
+            }
+        }
+
         if (!searchData.results) return [];
 
         // Exact substring match filter (ignoring spaces)
