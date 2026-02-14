@@ -152,13 +152,18 @@ export const searchOTT = async (query) => {
                 });
             }
 
-            // Step C: 쿠팡플레이 서버리스 크롤링 확인
+            // Step C: 쿠팡플레이 Vercel API 검색 (TMDB 데이터 미사용)
+            // GitHub Pages 등에서 호출 시 VITE_API_URL 환경변수에 Vercel 배포 주소 필요 (CORS 허용됨)
             try {
-                const apiUrl = `/api/coupang-search?title=${encodeURIComponent(fullTitle)}`;
+                const apiBase = import.meta.env.VITE_API_URL || '';
+                const apiUrl = `${apiBase}/api/coupang-search?title=${encodeURIComponent(fullTitle)}`;
+
                 const cpRes = await fetch(apiUrl, { signal: AbortSignal.timeout(6000) });
+
                 if (cpRes.ok) {
                     const cpData = await cpRes.json();
-                    if (cpData.exists) { // 실제로 존재할 때만 추가!!
+                    // API가 명확하 확인해준 서비스만 표시 (exists: true)
+                    if (cpData && cpData.exists) {
                         const isFree = cpData.isFree || false;
                         const priceText = cpData.priceText || (cpData.fallback ? '개별구매' : '개별구매');
                         const priceVal = cpData.rawPrice || (isFree ? 0 : 5000);
@@ -173,19 +178,8 @@ export const searchOTT = async (query) => {
                     }
                 }
             } catch (e) {
-                // 에러 시에는 TMDB에 쿠팡플레이 정보가 있는 경우에만 표시
-                const hasInTmdb = kr && ['flatrate', 'buy', 'rent'].some(cat =>
-                    kr[cat]?.some(p => normalizeProvider(p.provider_name) === 'Coupang Play')
-                );
-                if (hasInTmdb) {
-                    providersMap.set('Coupang Play', {
-                        name: 'Coupang Play',
-                        texts: ['개별구매'],
-                        prices: [5000],
-                        type: 'buy',
-                        link: `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(fullTitle)}`
-                    });
-                }
+                // API 호출 실패(404, 네트워크 오류 등) 시 아무것도 하지 않음 (사용자 요청: TMDB 의존 X)
+                console.debug('CP API Skipped:', e);
             }
 
             // 최종 병합 (Final consolidation)

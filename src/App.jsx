@@ -209,7 +209,7 @@ function App() {
 
             <div className={`container ${hasSearched ? 'top-view' : 'center-view'}`}>
 
-                <header className="header-section" style={{ width: '100%', maxWidth: '700px', textAlign: 'center', marginBottom: hasSearched ? '40px' : '60px' }}>
+                <header className="header-section" style={{ width: '100%', maxWidth: '700px', textAlign: 'center', marginBottom: hasSearched ? '10px' : '60px' }}>
                     <div style={{ marginBottom: '40px' }}>
                         <h1 style={{ fontSize: '56px', fontWeight: 900, letterSpacing: '-0.05em', margin: '0 0 10px 0', background: 'linear-gradient(to bottom, #fff, #9ca3af)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                             OTT HUB
