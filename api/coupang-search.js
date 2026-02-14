@@ -118,6 +118,17 @@ export default async function handler(req, res) {
             }
         }
 
+        // 2차 확인: 오퍼 파싱에서 실패했더라도 'cpx' (CosmoGo/Cineplex 등으로 추정되나 쿠팡플레이와 연동되는 식별자)가 있다면 허용
+        // 이전 로직에서 "나 홀로 집에 1"은 찾고 "4"는 제외하는 데 성공했던 검증된 로직
+        if (!exists) {
+            const cpxExists = /"shortName":"cpx"/.test(detailHtml);
+            if (cpxExists) {
+                exists = true;
+                isFree = true;
+                priceText = '와우 회원 무료'; // 상세 정보를 못 찾았지만 존재한다면 대부분 구독 무료
+            }
+        }
+
         return res.status(200).json({
             exists: exists,
             price: price,
