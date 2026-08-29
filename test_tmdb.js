@@ -1,4 +1,4 @@
-const TMDB_API_KEY = 'eb11bb474eef7856758589fb09e65c29';
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 async function testSearch(query) {

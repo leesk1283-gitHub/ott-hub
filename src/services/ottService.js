@@ -4,9 +4,9 @@
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w200';
-const TMDB_API_KEY = 'eb11bb474eef7856758589fb09e65c29';
+const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
-const RAPID_API_KEY = 'fdd47c2553mshd19015530c43e2cp1a9d7djsn31c6ad035190';
+const RAPID_API_KEY = import.meta.env.VITE_RAPID_API_KEY;
 const RAPID_API_HOST = 'streaming-availability.p.rapidapi.com';
 
 /**

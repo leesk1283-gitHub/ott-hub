@@ -1,5 +1,5 @@
 // Debug: Check Premium API for Zootopia (269149)
-const RAPID_API_KEY = 'fdd47c2553mshd19015530c43e2cp1a9d7djsn31c6ad035190';
+const RAPID_API_KEY = process.env.RAPID_API_KEY;
 const RAPID_API_HOST = 'streaming-availability.p.rapidapi.com';
 
 async function checkPremiumZootopia() {

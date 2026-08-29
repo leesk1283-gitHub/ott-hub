@@ -1,4 +1,4 @@
-const TMDB_API_KEY = 'eb11bb474eef7856758589fb09e65c29';
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
 
 async function searchIds(query) {
     const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=ko-KR`);

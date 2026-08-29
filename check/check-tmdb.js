@@ -1,4 +1,4 @@
-const TMDB_API_KEY = 'eb11bb474eef7856758589fb09e65c29';
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
 
 async function test() {
     const tmdbId = 771;
